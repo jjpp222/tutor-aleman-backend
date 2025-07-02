@@ -80,7 +80,7 @@ module.exports = async function (context, req) {
         logWithContext(context, 'info', 'Voice conversation processed successfully');
 
         // Generate TTS audio
-        const ttsResponse = await fetch(`${config.speech.region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+        const ttsResponse = await fetch(`https://${config.speech.region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
             method: 'POST',
             headers: {
                 'Ocp-Apim-Subscription-Key': config.speech.key,
