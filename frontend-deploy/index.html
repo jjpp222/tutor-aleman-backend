@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇩🇪 Tutor Alemán - Producción</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .app {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #fff, #ffd700);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle {
+            opacity: 0.9;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .voice-btn {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a5a);
+            color: white;
+            font-size: 2.5em;
+            cursor: pointer;
+            margin: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        .voice-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+        }
+        .voice-btn.listening {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            animation: pulse 2s infinite;
+        }
+        .voice-btn.speaking {
+            background: linear-gradient(45deg, #ffd700, #ffb347);
+            animation: glow 1.5s ease-in-out infinite alternate;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        @keyframes glow {
+            from { box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
+            to { box-shadow: 0 0 30px rgba(255, 215, 0, 0.8); }
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .connection-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .online {
+            background: rgba(46, 204, 113, 0.8);
+            color: white;
+        }
+        .offline {
+            background: rgba(231, 76, 60, 0.8);
+            color: white;
+        }
+        .chat-input {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+            margin: 10px 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .chat-input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        .send-btn {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            border: none;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .send-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        .conversation {
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 10px;
+        }
+        .user-message {
+            background: rgba(52, 152, 219, 0.3);
+            text-align: right;
+        }
+        .ai-message {
+            background: rgba(46, 204, 113, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">
+        🔄 Conectando...
+    </div>
+
+    <div class="app">
+        <h1>🇩🇪 Tutor Alemán</h1>
+        <p class="subtitle">Practica alemán con IA - Niveles B1/B2</p>
+        
+        <div id="status" class="status">
+            🔄 Inicializando sistema...
+        </div>
+
+        <!-- Botón de voz principal -->
+        <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()">
+            🎤
+        </button>
+
+        <!-- Chat alternativo -->
+        <div style="margin-top: 30px;">
+            <input type="text" class="chat-input" id="chatInput" 
+                   placeholder="O escribe tu mensaje en alemán aquí..."
+                   onkeypress="if(event.key==='Enter') sendTextMessage()">
+            <button class="send-btn" onclick="sendTextMessage()">
+                💬 Enviar
+            </button>
+        </div>
+
+        <!-- Conversación -->
+        <div class="conversation" id="conversation"></div>
+
+        <!-- Audio player para respuestas -->
+        <audio id="audioPlayer" style="width: 100%; margin-top: 15px;" controls></audio>
+    </div>
+
+    <script>
+        // === CONFIGURACIÓN ===
+        const API_BASE = 'https://tutor-aleman-backend-v4.azurewebsites.net/api';
+        
+        // === VARIABLES GLOBALES ===
+        let isListening = false;
+        let isSpeaking = false;
+        let recognition = null;
+        let conversationHistory = [];
+
+        // === ELEMENTOS DOM ===
+        const voiceBtn = document.getElementById('voiceBtn');
+        const status = document.getElementById('status');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const conversation = document.getElementById('conversation');
+        const chatInput = document.getElementById('chatInput');
+        const audioPlayer = document.getElementById('audioPlayer');
+
+        // === INICIALIZACIÓN ===
+        window.onload = async function() {
+            updateStatus('🔄 Verificando conexión con el backend...');
+            await checkBackendConnection();
+            initializeSpeechRecognition();
+        };
+
+        // === VERIFICAR CONEXIÓN CON BACKEND ===
+        async function checkBackendConnection() {
+            try {
+                const response = await fetch(`${API_BASE}/hello`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    connectionStatus.textContent = '🟢 Backend Online';
+                    connectionStatus.className = 'connection-status online';
+                    updateStatus('✅ Sistema listo - ¡Habla o escribe en alemán!');
+                    console.log('Backend conectado:', data);
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                connectionStatus.textContent = '🔴 Backend Offline';
+                connectionStatus.className = 'connection-status offline';
+                updateStatus('❌ Error de conexión - Verifica tu internet');
+                console.error('Error de conexión:', error);
+            }
+        }
+
+        // === INICIALIZAR RECONOCIMIENTO DE VOZ ===
+        function initializeSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.lang = 'de-DE';
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                recognition.onstart = function() {
+                    console.log('Reconocimiento de voz iniciado');
+                };
+
+                recognition.onresult = function(event) {
+                    const transcript = event.results[0][0].transcript;
+                    console.log('Texto reconocido:', transcript);
+                    processUserInput(transcript);
+                };
+
+                recognition.onerror = function(event) {
+                    console.error('Error de reconocimiento:', event.error);
+                    stopListening();
+                    updateStatus('❌ Error en reconocimiento de voz');
+                };
+
+                recognition.onend = function() {
+                    stopListening();
+                };
+            } else {
+                console.warn('Reconocimiento de voz no soportado');
+                updateStatus('⚠️ Reconocimiento de voz no disponible - Usa el chat');
+            }
+        }
+
+        // === TOGGLE VOZ ===
+        function toggleVoice() {
+            if (isListening) {
+                stopListening();
+            } else if (isSpeaking) {
+                stopSpeaking();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            if (!recognition) {
+                updateStatus('❌ Reconocimiento de voz no disponible');
+                return;
+            }
+
+            isListening = true;
+            voiceBtn.className = 'voice-btn listening';
+            voiceBtn.textContent = '🔊';
+            updateStatus('🎤 Escuchando... Habla en alemán');
+            
+            try {
+                recognition.start();
+            } catch (error) {
+                console.error('Error al iniciar reconocimiento:', error);
+                stopListening();
+            }
+        }
+
+        function stopListening() {
+            isListening = false;
+            voiceBtn.className = 'voice-btn';
+            voiceBtn.textContent = '🎤';
+            updateStatus('✅ Sistema listo');
+            
+            if (recognition) {
+                recognition.stop();
+            }
+        }
+
+        function stopSpeaking() {
+            isSpeaking = false;
+            voiceBtn.className = 'voice-btn';
+            voiceBtn.textContent = '🎤';
+            updateStatus('✅ Sistema listo');
+            audioPlayer.pause();
+        }
+
+        // === PROCESAR ENTRADA DEL USUARIO ===
+        async function processUserInput(userText) {
+            if (!userText.trim()) return;
+
+            // Agregar mensaje del usuario a la conversación
+            addMessageToConversation('user', userText);
+            updateStatus('🤔 Procesando con IA...');
+
+            try {
+                // Enviar a la IA
+                const response = await fetch(`${API_BASE}/test-chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: userText })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                const aiResponse = data.message || data.response || 'Entschuldigung, ich konnte nicht antworten.';
+
+                // Agregar respuesta de IA a la conversación
+                addMessageToConversation('ai', aiResponse);
+
+                // Convertir a audio
+                await generateSpeech(aiResponse);
+
+            } catch (error) {
+                console.error('Error procesando mensaje:', error);
+                updateStatus('❌ Error comunicándose con IA');
+                addMessageToConversation('ai', 'Entschuldigung, es gab einen technischen Fehler.');
+            }
+        }
+
+        // === ENVIAR MENSAJE DE TEXTO ===
+        function sendTextMessage() {
+            const text = chatInput.value.trim();
+            if (text) {
+                chatInput.value = '';
+                processUserInput(text);
+            }
+        }
+
+        // === GENERAR AUDIO ===
+        async function generateSpeech(text) {
+            try {
+                updateStatus('🔊 Generando audio...');
+                
+                const response = await fetch(`${API_BASE}/speech/synthesize-url`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: 'natural',
+                        language: 'de-DE',
+                        speed: 'medium'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.audioData) {
+                    // Reproducir audio
+                    const audioBlob = base64ToBlob(data.audioData, 'audio/wav');
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    
+                    audioPlayer.src = audioUrl;
+                    audioPlayer.play();
+                    
+                    isSpeaking = true;
+                    voiceBtn.className = 'voice-btn speaking';
+                    voiceBtn.textContent = '🔊';
+                    updateStatus('🎵 Reproduciendo respuesta...');
+
+                    audioPlayer.onended = function() {
+                        stopSpeaking();
+                    };
+                } else {
+                    throw new Error('No se recibió audio');
+                }
+
+            } catch (error) {
+                console.error('Error generando audio:', error);
+                updateStatus('❌ Error generando audio');
+            }
+        }
+
+        // === UTILIDADES ===
+        function updateStatus(message) {
+            status.textContent = message;
+        }
+
+        function addMessageToConversation(sender, message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            messageDiv.innerHTML = `<strong>${sender === 'user' ? '👤 Tú' : '🤖 Tutor'}:</strong> ${message}`;
+            conversation.appendChild(messageDiv);
+            conversation.scrollTop = conversation.scrollHeight;
+        }
+
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+
+        // === VERIFICAR CONEXIÓN PERIÓDICAMENTE ===
+        setInterval(checkBackendConnection, 30000); // Cada 30 segundos
+    </script>
+</body>
+</html>
