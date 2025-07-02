@@ -1,0 +1,23 @@
+{
+  "name": "tutor-aleman-backend",
+  "version": "1.0.0",
+  "description": "Backend Azure Functions para Tutor de Alemán con IA",
+  "main": "index.js",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.1",
+    "@azure/cosmos": "^4.1.1",
+    "@azure/storage-blob": "^12.17.0",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "azure-functions-core-tools": "^4.0.5455"
+  },
+  "engines": {
+    "node": "~18"
+  }
+}

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇩🇪 Tutor Alemán - Azure TTS</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .app {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #fff, #ffd700);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle {
+            opacity: 0.9;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .voice-btn {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a5a);
+            color: white;
+            font-size: 2.5em;
+            cursor: pointer;
+            margin: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 25px rgba(255, 107, 107, 0.4);
+        }
+        .voice-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 15px 35px rgba(255, 107, 107, 0.6);
+        }
+        .voice-btn.listening {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            animation: pulse 1.5s infinite;
+        }
+        .voice-btn.speaking {
+            background: linear-gradient(45deg, #ffa726, #ff9800);
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .status {
+            font-size: 1.1em;
+            margin: 20px 0;
+            min-height: 25px;
+            font-weight: 500;
+        }
+        .test-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        .test-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .test-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+        .chat {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+            min-height: 150px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .message {
+            margin: 8px 0;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            opacity: 0;
+            animation: slideIn 0.3s ease forwards;
+        }
+        .user { background: rgba(66, 165, 245, 0.3); margin-left: 30px; }
+        .ai { background: rgba(76, 175, 80, 0.3); margin-right: 30px; }
+        .system { background: rgba(255, 193, 7, 0.3); text-align: center; margin: 0; font-style: italic; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .footer {
+            margin-top: 20px;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+        .status-indicators {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+            font-size: 12px;
+        }
+        .indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+        }
+        .dot.ok { background: #4caf50; }
+        .dot.error { background: #f44336; }
+        .dot.pending { background: #ff9800; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <h1>🇩🇪 Tutor Alemán</h1>
+        <div class="subtitle">Conversación por voz con Azure TTS</div>
+        
+        <button id="voiceBtn" class="voice-btn">🎤</button>
+        
+        <div id="status" class="status">Inicializando sistema...</div>
+        
+        <div class="test-buttons">
+            <button class="test-btn" onclick="testSpanish()">🇪🇸 Test Español</button>
+            <button class="test-btn" onclick="testGerman()">🇩🇪 Test Alemán</button>
+            <button class="test-btn" onclick="clearMessages()">🗑️ Limpiar</button>
+        </div>
+        
+        <div id="chat" class="chat"></div>
+        
+        <div class="status-indicators">
+            <div class="indicator">
+                <div id="backend-dot" class="dot pending"></div>
+                <span>Backend</span>
+            </div>
+            <div class="indicator">
+                <div id="tts-dot" class="dot pending"></div>
+                <span>Azure TTS</span>
+            </div>
+            <div class="indicator">
+                <div id="voice-dot" class="dot pending"></div>
+                <span>Reconocimiento</span>
+            </div>
+        </div>
+        
+        <div class="footer">
+            ✅ Proyecto completado - Desplegado en Azure Static Web Apps
+        </div>
+    </div>
+
+    <script>
+        // Configuración - TU BACKEND QUE YA FUNCIONA
+        const API_BASE = 'https://tutor-aleman-api-v2-d4aabgcvapg0ekfj.westeurope-01.azurewebsites.net/api';
+        
+        // Elementos DOM
+        const voiceBtn = document.getElementById('voiceBtn');
+        const status = document.getElementById('status');
+        const chat = document.getElementById('chat');
+        const backendDot = document.getElementById('backend-dot');
+        const ttsDot = document.getElementById('tts-dot');
+        const voiceDot = document.getElementById('voice-dot');
+        
+        // Estado
+        let recognition = null;
+        let isListening = false;
+        let isSpeaking = false;
+        let currentAudio = null;
+
+        // Inicialización automática
+        window.addEventListener('load', init);
+
+        async function init() {
+            addMessage('🚀 Iniciando Tutor Alemán en Azure...', 'system');
+            
+            // Test backend
+            try {
+                const response = await fetch(`${API_BASE}/hello`);
+                if (response.ok) {
+                    backendDot.className = 'dot ok';
+                    addMessage('✅ Backend Azure conectado', 'system');
+                } else {
+                    throw new Error('Backend no responde');
+                }
+            } catch (error) {
+                backendDot.className = 'dot error';
+                addMessage('❌ Error: ' + error.message, 'system');
+                status.textContent = 'Error de conexión';
+                return;
+            }
+
+            // Test Azure TTS
+            ttsDot.className = 'dot pending';
+            const ttsWorking = await testTTS('Sistema iniciado correctamente', false);
+            ttsDot.className = ttsWorking ? 'dot ok' : 'dot error';
+            
+            if (ttsWorking) {
+                addMessage('✅ Azure TTS Premium funcionando', 'system');
+            } else {
+                addMessage('⚠️ Azure TTS con problemas', 'system');
+            }
+
+            // Configurar reconocimiento de voz
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'de-DE';
+
+                recognition.onstart = () => {
+                    isListening = true;
+                    voiceBtn.classList.add('listening');
+                    voiceBtn.textContent = '🎧';
+                    status.textContent = 'Escuchando... Habla en alemán o español';
+                };
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    addMessage('🎤 ' + transcript, 'user');
+                    handleUserInput(transcript);
+                };
+
+                recognition.onend = () => {
+                    isListening = false;
+                    voiceBtn.classList.remove('listening');
+                    voiceBtn.textContent = '🎤';
+                    if (!isSpeaking) {
+                        status.textContent = 'Presiona el micrófono para hablar';
+                    }
+                };
+
+                voiceDot.className = 'dot ok';
+                addMessage('🎤 Sistema de voz listo', 'system');
+            } else {
+                voiceDot.className = 'dot error';
+                addMessage('❌ Navegador no soporta reconocimiento de voz', 'system');
+            }
+
+            // Sistema listo
+            status.textContent = '🎯 Sistema listo - Presiona el micrófono para empezar';
+            addMessage('🎯 ¡LISTO! Tu Tutor Alemán con Azure TTS está funcionando', 'system');
+        }
+
+        // Botón de voz
+        voiceBtn.addEventListener('click', () => {
+            if (isListening) {
+                recognition.stop();
+            } else if (isSpeaking && currentAudio) {
+                stopAudio();
+            } else if (recognition) {
+                recognition.start();
+            }
+        });
+
+        // Manejar entrada del usuario
+        async function handleUserInput(text) {
+            status.textContent = 'Pensando...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/test-chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+
+                const data = await response.json();
+                
+                if (data.success && data.message) {
+                    addMessage('🤖 ' + data.message, 'ai');
+                    await speakText(data.message);
+                } else {
+                    throw new Error('Sin respuesta de IA');
+                }
+            } catch (error) {
+                addMessage('❌ Error: ' + error.message, 'system');
+                status.textContent = 'Error en conversación';
+            }
+        }
+
+        // Síntesis de voz Azure TTS
+        async function speakText(text) {
+            if (isSpeaking) return;
+            
+            isSpeaking = true;
+            voiceBtn.classList.add('speaking');
+            voiceBtn.textContent = '🔊';
+            status.textContent = 'Generando voz Azure...';
+
+            try {
+                const response = await fetch(`${API_BASE}/debug/tts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: cleanText(text),
+                        voice: 'natural',
+                        language: detectLanguage(text),
+                        speed: 'fast'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success && data.audioData) {
+                    status.textContent = `🔊 Reproduciendo Azure TTS (${data.voiceUsed})`;
+                    
+                    const audioBlob = base64ToBlob(data.audioData);
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    currentAudio = new Audio(audioUrl);
+                    
+                    currentAudio.onended = () => {
+                        finishSpeaking();
+                        URL.revokeObjectURL(audioUrl);
+                        status.textContent = 'Presiona el micrófono para responder';
+                    };
+                    
+                    currentAudio.onerror = () => {
+                        addMessage('❌ Error reproduciendo audio', 'system');
+                        finishSpeaking();
+                    };
+                    
+                    await currentAudio.play();
+                } else {
+                    throw new Error('Sin audio de Azure TTS');
+                }
+            } catch (error) {
+                addMessage('❌ TTS Error: ' + error.message, 'system');
+                finishSpeaking();
+            }
+        }
+
+        function finishSpeaking() {
+            isSpeaking = false;
+            voiceBtn.classList.remove('speaking');
+            voiceBtn.textContent = '🎤';
+            currentAudio = null;
+        }
+
+        function stopAudio() {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+                finishSpeaking();
+                status.textContent = 'Audio detenido';
+            }
+        }
+
+        // Funciones de test
+        async function testSpanish() {
+            addMessage('🧪 Test TTS Español', 'user');
+            await testTTS('Hola, soy tu tutor de alemán con voz Azure premium');
+        }
+
+        async function testGerman() {
+            addMessage('🧪 Test TTS Alemán', 'user');
+            await testTTS('Hallo, ich bin dein Deutsch-Tutor mit Azure Premium Stimme');
+        }
+
+        async function testTTS(text, showResult = true) {
+            try {
+                const response = await fetch(`${API_BASE}/debug/tts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: 'natural',
+                        language: detectLanguage(text),
+                        speed: 'fast'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success && data.audioData) {
+                    if (showResult) {
+                        addMessage(`✅ Azure TTS: ${data.voiceUsed}`, 'system');
+                    }
+                    
+                    const audioBlob = base64ToBlob(data.audioData);
+                    const audio = new Audio(URL.createObjectURL(audioBlob));
+                    audio.play();
+                    
+                    return true;
+                } else {
+                    if (showResult) {
+                        addMessage('❌ Test TTS falló', 'system');
+                    }
+                    return false;
+                }
+            } catch (error) {
+                if (showResult) {
+                    addMessage('❌ Test Error: ' + error.message, 'system');
+                }
+                return false;
+            }
+        }
+
+        // Utilidades
+        function addMessage(text, type) {
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.textContent = text;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function clearMessages() {
+            chat.innerHTML = '';
+            addMessage('🗑️ Chat limpiado', 'system');
+        }
+
+        function detectLanguage(text) {
+            const germanWords = ['ich', 'du', 'er', 'sie', 'und', 'der', 'die', 'das', 'haben', 'sein', 'wie', 'geht', 'hallo', 'gut'];
+            const spanishWords = ['yo', 'tú', 'él', 'ella', 'y', 'el', 'la', 'tener', 'ser', 'estar', 'hola', 'como', 'bien'];
+            
+            const lower = text.toLowerCase();
+            const germanCount = germanWords.filter(w => lower.includes(w)).length;
+            const spanishCount = spanishWords.filter(w => lower.includes(w)).length;
+            
+            return spanishCount > germanCount ? 'es-ES' : 'de-DE';
+        }
+
+        function cleanText(text) {
+            return text.replace(/[😊😄😃🙂😌🤔👍💪🎉🚀✨💯🔥⭐🌟❤️💙💚💛🧡💜]/g, '').trim();
+        }
+
+        function base64ToBlob(base64) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            return new Blob([new Uint8Array(byteNumbers)], { type: 'audio/wav' });
+        }
+    </script>
+</body>
+</html>

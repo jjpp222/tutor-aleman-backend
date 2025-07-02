@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🧪 Test Azure TTS</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #1a1a1a; color: white; }
+        button { padding: 15px 25px; margin: 10px; font-size: 16px; cursor: pointer; }
+        .test { background: #4CAF50; color: white; border: none; border-radius: 5px; }
+        .output { background: #333; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .success { color: #4CAF50; }
+        .error { color: #ff4444; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Azure TTS Directo</h1>
+    
+    <button class="test" onclick="testSpanish()">🇪🇸 Test Español</button>
+    <button class="test" onclick="testGerman()">🇩🇪 Test Alemán</button>
+    <button class="test" onclick="testBackend()">🔧 Test Backend</button>
+    
+    <div id="output" class="output">
+        Presiona un botón para probar...
+    </div>
+
+    <script>
+        const API_BASE = 'https://tutor-aleman-api-v2-d4aabgcvapg0ekfj.westeurope-01.azurewebsites.net/api';
+        const output = document.getElementById('output');
+
+        function log(message, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
+            output.innerHTML += `<div class="${className}">[${time}] ${message}</div>`;
+            output.scrollTop = output.scrollHeight;
+            console.log(message);
+        }
+
+        async function testBackend() {
+            log('🔧 Probando conectividad del backend...');
+            try {
+                const response = await fetch(`${API_BASE}/hello`);
+                const data = await response.json();
+                if (data.message) {
+                    log(`✅ Backend activo: ${data.message}`, 'success');
+                } else {
+                    log('❌ Backend responde pero sin mensaje válido', 'error');
+                }
+            } catch (error) {
+                log(`❌ Error conectando al backend: ${error.message}`, 'error');
+            }
+        }
+
+        async function testAzureTTS(text, language) {
+            log(`🔊 Probando Azure TTS: "${text}" (${language})`);
+            
+            try {
+                const response = await fetch(`${API_BASE}/debug/tts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: 'natural',
+                        language: language,
+                        speed: 'fast'
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.success && data.audioData) {
+                    log(`✅ Azure TTS exitoso - Voz: ${data.voiceUsed}`, 'success');
+                    log(`🌍 Idioma detectado: ${data.detectedLanguage}`, 'success');
+                    log(`📊 Audio recibido: ${data.audioData.length} caracteres`, 'success');
+                    
+                    // Reproducir audio
+                    playAudio(data.audioData);
+                } else {
+                    log(`❌ Azure TTS falló: ${JSON.stringify(data)}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Error en Azure TTS: ${error.message}`, 'error');
+            }
+        }
+
+        function playAudio(base64Audio) {
+            try {
+                log('🎵 Reproduciendo audio...');
+                const binaryString = window.atob(base64Audio);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const blob = new Blob([bytes], { type: 'audio/wav' });
+                const audio = new Audio(URL.createObjectURL(blob));
+                
+                audio.onloadeddata = () => log('✅ Audio cargado correctamente', 'success');
+                audio.onplay = () => log('▶️ Reproduciendo...', 'success');
+                audio.onended = () => log('⏹️ Reproducción terminada', 'success');
+                audio.onerror = (e) => log(`❌ Error reproduciendo audio: ${e}`, 'error');
+                
+                audio.play();
+                
+            } catch (error) {
+                log(`❌ Error procesando audio: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSpanish() {
+            await testAzureTTS('Hola, esto es una prueba en español con Azure TTS', 'es-ES');
+        }
+
+        async function testGerman() {
+            await testAzureTTS('Hallo, das ist ein Test auf Deutsch mit Azure TTS', 'de-DE');
+        }
+
+        // Test inicial
+        window.onload = () => {
+            log('🚀 Página cargada. Listo para pruebas.');
+            testBackend();
+        };
+    </script>
+</body>
+</html>

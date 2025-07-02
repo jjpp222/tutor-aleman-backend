@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇩🇪 Tutor Alemán - Conversación por Voz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .recording {
+            animation: recording 1s infinite;
+        }
+        
+        @keyframes recording {
+            0%, 100% { background-color: #ef4444; }
+            50% { background-color: #dc2626; }
+        }
+        
+        .voice-wave {
+            width: 100px;
+            height: 100px;
+            border: 3px solid #3b82f6;
+            border-radius: 50%;
+            position: relative;
+            animation: voiceWave 2s infinite;
+        }
+        
+        @keyframes voiceWave {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        
+        .status-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-listening { background-color: #10b981; }
+        .status-processing { background-color: #f59e0b; }
+        .status-speaking { background-color: #3b82f6; }
+        .status-idle { background-color: #6b7280; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div id="app">
+        <!-- Login Screen -->
+        <div id="loginScreen" class="flex items-center justify-center min-h-screen px-6">
+            <div class="w-full max-w-md">
+                <div class="bg-white rounded-2xl shadow-xl p-8">
+                    <div class="text-center mb-8">
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">
+                            🎤 Tutor Alemán por Voz
+                        </h1>
+                        <p class="text-gray-600">Conversación en tiempo real</p>
+                    </div>
+
+                    <form id="loginForm" class="space-y-6">
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                            <input id="email" type="email" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition" placeholder="tu@email.com" />
+                        </div>
+                        <div>
+                            <label for="password" class="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
+                            <input id="password" type="password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition" placeholder="••••••••" />
+                        </div>
+                        <div id="loginError" class="bg-red-50 text-red-600 p-3 rounded-lg text-sm hidden"></div>
+                        <button type="submit" id="loginBtn" class="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition">Iniciar Sesión</button>
+                    </form>
+
+                    <!-- Usuarios de prueba -->
+                    <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                        <h3 class="text-sm font-medium text-gray-900 mb-2">Usuarios de prueba:</h3>
+                        <div class="text-xs text-gray-600 space-y-1">
+                            <div>
+                                <button onclick="fillLogin('admin@tutoraleman.com', 'AdminPass123!')" class="text-blue-600 underline">
+                                    Admin: admin@tutoraleman.com / AdminPass123!
+                                </button>
+                            </div>
+                            <div>
+                                <button onclick="fillLogin('thunder@example.com', 'TestPass123!')" class="text-blue-600 underline">
+                                    Estudiante: thunder@example.com / TestPass123!
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Voice Chat Screen -->
+        <div id="voiceScreen" class="hidden min-h-screen flex flex-col bg-gray-900 text-white">
+            <!-- Header -->
+            <div class="bg-gray-800 px-6 py-4 border-b border-gray-700">
+                <div class="flex justify-between items-center max-w-4xl mx-auto">
+                    <div class="flex items-center gap-3">
+                        <div class="text-2xl">🇩🇪</div>
+                        <div>
+                            <h1 class="text-xl font-bold">Tutor Virtual de Alemán</h1>
+                            <p class="text-sm text-gray-300" id="userInfo">Conversación por Voz</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center">
+                            <span class="status-indicator" id="statusIndicator"></span>
+                            <span class="text-sm" id="statusText">Inactivo</span>
+                        </div>
+                        <button id="toggleLang" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
+                            🇩🇪 Alemán
+                        </button>
+                        <button id="logoutBtn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                            Salir
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Voice Interface -->
+            <div class="flex-1 flex items-center justify-center">
+                <div class="text-center max-w-2xl mx-auto px-6">
+                    <!-- Voice Activation Circle -->
+                    <div class="relative mb-8">
+                        <div id="voiceCircle" class="w-48 h-48 bg-blue-600 rounded-full flex items-center justify-center mx-auto cursor-pointer hover:bg-blue-700 transition-all duration-300 shadow-2xl">
+                            <div class="text-6xl" id="voiceIcon">🎤</div>
+                        </div>
+                        
+                        <!-- Voice waves when active -->
+                        <div id="voiceWaves" class="hidden absolute inset-0 flex items-center justify-center">
+                            <div class="voice-wave absolute"></div>
+                            <div class="voice-wave absolute" style="animation-delay: 0.5s;"></div>
+                            <div class="voice-wave absolute" style="animation-delay: 1s;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Instructions -->
+                    <div id="instructions" class="mb-8">
+                        <h2 class="text-2xl font-bold mb-4">¿Cómo funciona?</h2>
+                        <div class="space-y-3 text-gray-300">
+                            <p class="flex items-center justify-center gap-3">
+                                <span class="text-2xl">🎤</span>
+                                <strong>Haz clic en el micrófono</strong> o presiona <kbd class="bg-gray-700 px-2 py-1 rounded">ESPACIO</kbd> para empezar a hablar
+                            </p>
+                            <p class="flex items-center justify-center gap-3">
+                                <span class="text-2xl">🗣️</span>
+                                <strong>Habla en español o alemán</strong> - El tutor te responderá en alemán
+                            </p>
+                            <p class="flex items-center justify-center gap-3">
+                                <span class="text-2xl">🔄</span>
+                                <strong>Conversación automática</strong> - Sin necesidad de botones
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Current Conversation -->
+                    <div id="conversationArea" class="hidden">
+                        <div class="bg-gray-800 rounded-xl p-6 mb-6">
+                            <h3 class="text-lg font-semibold mb-4 text-blue-400">Conversación Actual:</h3>
+                            
+                            <!-- Last User Message -->
+                            <div id="lastUserMessage" class="mb-4 p-4 bg-gray-700 rounded-lg">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="text-green-400">👤 Tú dijiste:</span>
+                                </div>
+                                <p id="userText" class="text-white"></p>
+                            </div>
+
+                            <!-- Tutor Response -->
+                            <div id="tutorResponse" class="p-4 bg-blue-900 rounded-lg">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="text-blue-400">🤖 Tutor responde:</span>
+                                    <button id="replayAudio" class="text-xs bg-blue-600 px-2 py-1 rounded hover:bg-blue-700 transition">
+                                        🔊 Repetir
+                                    </button>
+                                </div>
+                                <p id="tutorText" class="text-white"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="flex justify-center gap-4">
+                        <button id="toggleVoice" class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition hidden">
+                            🎤 Activar Voz Continua
+                        </button>
+                        <button id="clearConversation" class="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+                            🗑️ Limpiar Conversación
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="bg-gray-800 px-6 py-4 border-t border-gray-700">
+                <div class="max-w-4xl mx-auto text-center text-sm text-gray-400">
+                    💡 <strong>Consejo:</strong> Habla claramente y espera a que el tutor termine de responder antes de continuar
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://tutor-aleman-api-v2-d4aabgcvapg0ekfj.westeurope-01.azurewebsites.net/api';
+        
+        let currentUser = null;
+        let currentToken = null;
+        let recognition = null;
+        let isListening = false;
+        let isProcessing = false;
+        let isSpeaking = false;
+        let lastAudioData = null;
+        let currentAudio = null;
+        let currentLang = 'de-DE';
+        let langToggle = false;
+
+        // Elementos del DOM
+        const loginScreen = document.getElementById('loginScreen');
+        const voiceScreen = document.getElementById('voiceScreen');
+        const voiceCircle = document.getElementById('voiceCircle');
+        const voiceIcon = document.getElementById('voiceIcon');
+        const voiceWaves = document.getElementById('voiceWaves');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const instructions = document.getElementById('instructions');
+        const conversationArea = document.getElementById('conversationArea');
+        const userText = document.getElementById('userText');
+        const tutorText = document.getElementById('tutorText');
+        const lastUserMessage = document.getElementById('lastUserMessage');
+        const tutorResponse = document.getElementById('tutorResponse');
+
+        // Inicializar reconocimiento de voz
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                
+                recognition.continuous = false;
+                recognition.interimResults = true; // Permitir resultados parciales
+                recognition.lang = currentLang; // Idioma dinámico
+                recognition.maxAlternatives = 3; // Obtener alternativas
+                
+                recognition.onstart = () => {
+                    updateStatus('listening', 'Escuchando...');
+                    voiceIcon.textContent = '🎧';
+                    voiceWaves.classList.remove('hidden');
+                    voiceCircle.classList.add('recording');
+                };
+                
+                recognition.onresult = (event) => {
+                    // Obtener el resultado final
+                    const resultIndex = event.resultIndex;
+                    const result = event.results[resultIndex];
+                    
+                    if (result.isFinal) {
+                        let bestTranscript = result[0].transcript;
+                        
+                        // Buscar la mejor alternativa
+                        for (let i = 0; i < result.length; i++) {
+                            const alternative = result[i].transcript;
+                            console.log(`Alternativa ${i}:`, alternative, 'Confianza:', result[i].confidence);
+                            
+                            // Si encontramos palabras alemanas comunes, usar esa alternativa
+                            if (alternative.toLowerCase().includes('hallo') || 
+                                alternative.toLowerCase().includes('wie') ||
+                                alternative.toLowerCase().includes('geht') ||
+                                alternative.toLowerCase().includes('dir') ||
+                                alternative.toLowerCase().includes('alles') ||
+                                alternative.toLowerCase().includes('klar')) {
+                                bestTranscript = alternative;
+                                break;
+                            }
+                        }
+                        
+                        console.log('Transcripción final seleccionada:', bestTranscript);
+                        handleUserSpeech(bestTranscript);
+                    }
+                };
+                
+                recognition.onerror = (event) => {
+                    console.error('Error de reconocimiento:', event.error);
+                    updateStatus('idle', 'Error en reconocimiento de voz');
+                    resetVoiceInterface();
+                };
+                
+                recognition.onend = () => {
+                    if (!isProcessing) {
+                        resetVoiceInterface();
+                    }
+                };
+                
+                return true;
+            }
+            
+            alert('Tu navegador no soporta reconocimiento de voz. Prueba con Chrome.');
+            return false;
+        }
+
+        // Manejar voz del usuario
+        async function handleUserSpeech(transcript) {
+            if (!transcript.trim()) return;
+            
+            updateStatus('processing', 'Procesando...');
+            isProcessing = true;
+            
+            // Mostrar mensaje del usuario
+            userText.textContent = transcript;
+            conversationArea.classList.remove('hidden');
+            instructions.classList.add('hidden');
+            
+            try {
+                // Enviar al tutor IA
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`,
+                    },
+                    body: JSON.stringify({ message: transcript }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    tutorText.textContent = data.response;
+                    
+                    // Síntesis de voz automática
+                    await synthesizeAndPlaySpeech(data.response);
+                } else {
+                    tutorText.textContent = 'Lo siento, hubo un error procesando tu mensaje.';
+                    updateStatus('idle', 'Error - Haz clic para continuar');
+                }
+            } catch (err) {
+                console.error('Error en chat:', err);
+                tutorText.textContent = 'Error de conexión. Intenta de nuevo.';
+                updateStatus('idle', 'Error - Haz clic para continuar');
+            } finally {
+                isProcessing = false;
+            }
+        }
+
+        // Síntesis de voz
+        async function synthesizeAndPlaySpeech(text) {
+            updateStatus('speaking', 'Tutor hablando...');
+            isSpeaking = true;
+            voiceIcon.textContent = '🔊';
+            
+            try {
+                const response = await fetch(`${API_BASE}/speech/synthesize-url`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`,
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: 'friendly',
+                        language: 'de-DE'
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    lastAudioData = data.audioData;
+                    await playAudio(data.audioData);
+                }
+            } catch (err) {
+                console.error('Error TTS:', err);
+            } finally {
+                isSpeaking = false;
+                updateStatus('idle', 'Haz clic para hablar');
+                resetVoiceInterface();
+                
+                // Auto-reactivar escucha después de 2 segundos
+                setTimeout(() => {
+                    if (!isListening && !isProcessing && !isSpeaking) {
+                        startListening();
+                    }
+                }, 2000);
+            }
+        }
+
+        // Reproducir audio
+        function playAudio(base64Audio) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const binaryString = window.atob(base64Audio);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    const blob = new Blob([bytes], { type: 'audio/wav' });
+                    
+                    if (currentAudio) {
+                        currentAudio.pause();
+                    }
+                    
+                    currentAudio = new Audio();
+                    currentAudio.src = URL.createObjectURL(blob);
+                    
+                    currentAudio.onended = () => {
+                        URL.revokeObjectURL(currentAudio.src);
+                        resolve();
+                    };
+                    
+                    currentAudio.onerror = () => {
+                        URL.revokeObjectURL(currentAudio.src);
+                        reject(new Error('Error playing audio'));
+                    };
+                    
+                    currentAudio.play();
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+
+        // Actualizar estado
+        function updateStatus(status, text) {
+            statusIndicator.className = `status-indicator status-${status}`;
+            statusText.textContent = text;
+        }
+
+        // Resetear interfaz de voz
+        function resetVoiceInterface() {
+            isListening = false;
+            voiceIcon.textContent = '🎤';
+            voiceWaves.classList.add('hidden');
+            voiceCircle.classList.remove('recording');
+            updateStatus('idle', 'Haz clic para hablar');
+        }
+
+        // Iniciar escucha
+        function startListening() {
+            if (recognition && !isListening && !isProcessing && !isSpeaking) {
+                isListening = true;
+                recognition.start();
+            }
+        }
+
+        // Event Listeners
+        voiceCircle.addEventListener('click', startListening);
+
+        // Tecla espacio para activar
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !isListening && !isProcessing && !isSpeaking) {
+                e.preventDefault();
+                startListening();
+            }
+        });
+
+        // Repetir audio
+        document.getElementById('replayAudio').addEventListener('click', () => {
+            if (lastAudioData) {
+                playAudio(lastAudioData);
+            }
+        });
+
+        // Limpiar conversación
+        document.getElementById('clearConversation').addEventListener('click', () => {
+            conversationArea.classList.add('hidden');
+            instructions.classList.remove('hidden');
+            userText.textContent = '';
+            tutorText.textContent = '';
+        });
+
+        // Login (mismo código anterior)
+        function fillLogin(email, password) {
+            document.getElementById('email').value = email;
+            document.getElementById('password').value = password;
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Iniciando sesión...';
+
+            try {
+                const response = await fetch(`${API_BASE}/loginuser`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentToken = data.token;
+                    currentUser = data.user;
+                    
+                    localStorage.setItem('tutor_token', data.token);
+                    localStorage.setItem('tutor_user', JSON.stringify(data.user));
+                    
+                    showVoiceScreen();
+                } else {
+                    document.getElementById('loginError').textContent = data.error || 'Error en el login';
+                    document.getElementById('loginError').classList.remove('hidden');
+                }
+            } catch (err) {
+                document.getElementById('loginError').textContent = 'Error de conexión';
+                document.getElementById('loginError').classList.remove('hidden');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Iniciar Sesión';
+            }
+        });
+
+        function showVoiceScreen() {
+            loginScreen.classList.add('hidden');
+            voiceScreen.classList.remove('hidden');
+            
+            if (currentUser) {
+                document.getElementById('userInfo').textContent = `${currentUser.name} (${currentUser.role === 'admin' ? 'Administrador' : 'Estudiante'})`;
+            }
+            
+            // Inicializar reconocimiento de voz
+            if (initSpeechRecognition()) {
+                updateStatus('idle', 'Haz clic para hablar');
+            } else {
+                updateStatus('idle', 'Reconocimiento de voz no disponible');
+            }
+        }
+
+        // Toggle Language
+        document.getElementById('toggleLang').addEventListener('click', () => {
+            const toggleBtn = document.getElementById('toggleLang');
+            
+            if (currentLang === 'de-DE') {
+                currentLang = 'es-ES';
+                toggleBtn.innerHTML = '🇪🇸 Español';
+                toggleBtn.className = 'px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-sm';
+            } else {
+                currentLang = 'de-DE';
+                toggleBtn.innerHTML = '🇩🇪 Alemán';
+                toggleBtn.className = 'px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm';
+            }
+            
+            // Reinicializar reconocimiento de voz con nuevo idioma
+            if (recognition) {
+                recognition.lang = currentLang;
+            }
+            
+            console.log('Idioma cambiado a:', currentLang);
+        });
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('tutor_token');
+            localStorage.removeItem('tutor_user');
+            currentToken = null;
+            currentUser = null;
+            
+            voiceScreen.classList.add('hidden');
+            loginScreen.classList.remove('hidden');
+        });
+
+        // Verificar token al cargar
+        window.addEventListener('load', () => {
+            const token = localStorage.getItem('tutor_token');
+            const user = localStorage.getItem('tutor_user');
+            
+            if (token && user) {
+                currentToken = token;
+                currentUser = JSON.parse(user);
+                showVoiceScreen();
+            }
+        });
+    </script>
+</body>
+</html>

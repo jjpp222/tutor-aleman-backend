@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇩🇪 Tutor Alemán Inteligente</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .voice-active {
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.6);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .listening {
+            background: linear-gradient(45deg, #ef4444, #dc2626);
+            animation: listening 2s infinite;
+        }
+        
+        @keyframes listening {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .processing {
+            background: linear-gradient(45deg, #f59e0b, #d97706);
+        }
+        
+        .speaking {
+            background: linear-gradient(45deg, #10b981, #059669);
+        }
+        
+        .message-appear {
+            animation: messageAppear 0.5s ease-out;
+        }
+        
+        @keyframes messageAppear {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 min-h-screen text-white">
+    <div id="app">
+        <!-- Login Simple -->
+        <div id="loginScreen" class="flex items-center justify-center min-h-screen px-6">
+            <div class="w-full max-w-md">
+                <div class="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20">
+                    <div class="text-center mb-8">
+                        <div class="text-6xl mb-4">🤖</div>
+                        <h1 class="text-3xl font-bold mb-2">Tutor Alemán IA</h1>
+                        <p class="text-blue-200">Conversación inteligente por voz</p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <button onclick="quickLogin('admin')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-medium transition">
+                            🔑 Entrar como Admin
+                        </button>
+                        <button onclick="quickLogin('student')" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-medium transition">
+                            🎓 Entrar como Estudiante
+                        </button>
+                        <button onclick="demoAccess()" class="w-full bg-orange-600 hover:bg-orange-700 text-white py-3 px-4 rounded-lg font-medium transition">
+                            🚀 Acceso Demo (Sin Login)
+                        </button>
+                        <button onclick="premiumAccess()" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-lg font-medium transition">
+                            🎯 Acceso Premium Azure TTS
+                        </button>
+                    </div>
+
+                    <div id="loginError" class="mt-4 bg-red-500/20 text-red-200 p-3 rounded-lg text-sm hidden"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interfaz Principal -->
+        <div id="mainScreen" class="hidden min-h-screen flex flex-col">
+            <!-- Header Minimalista -->
+            <div class="bg-black/20 backdrop-blur-lg px-6 py-4 border-b border-white/10">
+                <div class="flex justify-between items-center max-w-4xl mx-auto">
+                    <div class="flex items-center gap-3">
+                        <div class="text-2xl">🤖</div>
+                        <div>
+                            <h1 class="text-xl font-bold">Tutor Alemán IA</h1>
+                            <p class="text-sm text-blue-200" id="statusText">Activación por voz</p>
+                        </div>
+                    </div>
+                    <button id="logoutBtn" class="px-4 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition">
+                        Salir
+                    </button>
+                </div>
+            </div>
+
+            <!-- Interfaz de Voz Central -->
+            <div class="flex-1 flex items-center justify-center px-6">
+                <div class="text-center max-w-3xl mx-auto">
+                    
+                    <!-- Círculo de Voz Inteligente -->
+                    <div class="relative mb-8">
+                        <div id="voiceCircle" class="w-64 h-64 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto cursor-pointer transition-all duration-500 hover:scale-105">
+                            <div class="text-8xl" id="voiceIcon">🎤</div>
+                        </div>
+                        
+                        <!-- Indicador de Estado -->
+                        <div class="absolute -bottom-4 left-1/2 transform -translate-x-1/2">
+                            <div id="statusIndicator" class="px-4 py-2 bg-black/50 backdrop-blur rounded-full text-sm font-medium">
+                                Haz clic o di "Hola"
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Conversación Solo por Voz (Sin Texto) -->
+                    <div id="conversationDisplay" class="space-y-6 hidden">
+                        <!-- Conversación oculta - Solo voz, sin texto -->
+                    </div>
+
+                    <!-- Instrucciones Inteligentes -->
+                    <div id="smartInstructions" class="mt-8 text-center text-blue-200">
+                        <p class="text-lg mb-4">🎯 <strong>Conversación 100% por Voz</strong></p>
+                        <div class="grid md:grid-cols-3 gap-4 text-sm">
+                            <div class="bg-white/5 rounded-lg p-4">
+                                <div class="text-2xl mb-2">🚫</div>
+                                <p><strong>Sin Texto</strong><br>Solo conversación por voz</p>
+                            </div>
+                            <div class="bg-white/5 rounded-lg p-4">
+                                <div class="text-2xl mb-2">🔊</div>
+                                <p><strong>Azure TTS</strong><br>Voz profesional alemana</p>
+                            </div>
+                            <div class="bg-white/5 rounded-lg p-4">
+                                <div class="text-2xl mb-2">🌍</div>
+                                <p><strong>Auto-Idioma</strong><br>Detecta alemán/español</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 text-xs text-blue-300">
+                            <p>✨ Abre la consola (F12) para ver logs de Azure TTS</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div id="loadingScreen" class="hidden flex items-center justify-center min-h-screen">
+            <div class="text-center">
+                <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-blue-400 mx-auto mb-4"></div>
+                <p class="text-blue-200">Conectando con IA...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://tutor-aleman-api-v2-d4aabgcvapg0ekfj.westeurope-01.azurewebsites.net/api';
+        
+        let currentUser = null;
+        let currentToken = null;
+        let recognition = null;
+        let isListening = false;
+        let isProcessing = false;
+        let isSpeaking = false;
+        let conversationActive = false;
+        let currentAudio = null;
+
+        // Elementos DOM
+        const loginScreen = document.getElementById('loginScreen');
+        const mainScreen = document.getElementById('mainScreen');
+        const loadingScreen = document.getElementById('loadingScreen');
+        const voiceCircle = document.getElementById('voiceCircle');
+        const voiceIcon = document.getElementById('voiceIcon');
+        const statusText = document.getElementById('statusText');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const conversationDisplay = document.getElementById('conversationDisplay');
+        const smartInstructions = document.getElementById('smartInstructions');
+
+        // Credenciales de prueba
+        const DEMO_USERS = {
+            admin: { email: 'admin@tutoraleman.com', password: 'AdminPass123!' },
+            student: { email: 'thunder@example.com', password: 'TestPass123!' }
+        };
+
+        // Token hardcodeado para acceso premium mientras se resuelve el login
+        const PREMIUM_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InByZW1pdW0tdXNlciIsImVtYWlsIjoidGVzdEBwcmVtaXVtLmNvbSIsIm5hbWUiOiJVc3VhcmlvIFByZW1pdW0iLCJpYXQiOjE3MzU3MjQ0MDAsImV4cCI6MTczNTgxMDgwMH0.test-premium-access";
+
+        // Login rápido con timeout y reintentos
+        async function quickLogin(userType) {
+            const { email, password } = DEMO_USERS[userType];
+            showLoading('Conectando con Azure...');
+
+            try {
+                // Primero verificar conectividad
+                console.log('🔍 Verificando conectividad del backend...');
+                const healthCheck = await fetch(`${API_BASE}/hello`, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(10000) // 10 segundos timeout
+                });
+
+                if (!healthCheck.ok) {
+                    throw new Error('Backend no disponible');
+                }
+
+                console.log('✅ Backend conectado, iniciando login...');
+                showLoading('Autenticando usuario...');
+
+                // Intentar login con timeout extendido
+                const response = await fetch(`${API_BASE}/loginuser`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                    signal: AbortSignal.timeout(30000) // 30 segundos timeout
+                });
+
+                console.log('📡 Respuesta login status:', response.status);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+                console.log('✅ Datos de login recibidos:', data);
+
+                if (data.success && data.token) {
+                    currentToken = data.token;
+                    currentUser = data.user;
+                    
+                    localStorage.setItem('tutor_token', data.token);
+                    localStorage.setItem('tutor_user', JSON.stringify(data.user));
+                    
+                    console.log('🎯 Login exitoso, inicializando sistema de voz...');
+                    await initializeVoiceSystem();
+                } else {
+                    showError(data.error || 'Credenciales inválidas');
+                }
+            } catch (err) {
+                console.error('❌ Error crítico de login:', err);
+                
+                if (err.name === 'TimeoutError') {
+                    showError('Timeout - El servidor está lento. Intenta de nuevo.');
+                } else if (err.message.includes('Failed to fetch')) {
+                    showError('Sin conexión a internet. Verifica tu red.');
+                } else {
+                    showError(`Error: ${err.message}`);
+                }
+                
+                // Fallback: permitir acceso sin login para testing
+                setTimeout(() => {
+                    if (confirm('¿Quieres acceder sin autenticación para probar la voz?')) {
+                        currentToken = 'demo-token'; // Token falso para testing
+                        currentUser = { email: 'demo@test.com', name: 'Usuario Demo' };
+                        initializeVoiceSystem();
+                    }
+                }, 3000);
+            }
+        }
+
+        // Acceso demo para testing sin login
+        async function demoAccess() {
+            showLoading('Iniciando modo demo...');
+            console.log('🚀 Accediendo en modo demo (sin autenticación)');
+            
+            // Simular usuario demo
+            currentToken = null; // Sin token real
+            currentUser = { 
+                email: 'demo@test.com', 
+                name: 'Usuario Demo',
+                type: 'demo'
+            };
+            
+            localStorage.setItem('tutor_demo', 'true');
+            
+            setTimeout(() => {
+                initializeVoiceSystem();
+            }, 1000);
+        }
+
+        // Acceso premium directo a Azure TTS
+        async function premiumAccess() {
+            showLoading('Activando Azure TTS Premium...');
+            console.log('🎯 Accediendo con Azure TTS Premium');
+            
+            // Usar token hardcodeado
+            currentToken = PREMIUM_TOKEN;
+            currentUser = { 
+                email: 'premium@azure.com', 
+                name: 'Usuario Premium Azure',
+                type: 'premium'
+            };
+            
+            localStorage.setItem('tutor_premium', 'true');
+            localStorage.setItem('tutor_token', PREMIUM_TOKEN);
+            
+            setTimeout(() => {
+                initializeVoiceSystem();
+            }, 1000);
+        }
+
+        // Inicializar sistema de voz inteligente
+        async function initializeVoiceSystem() {
+            showLoading('Preparando sistema de voz...');
+            
+            // Verificar soporte de voz
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                showError('Tu navegador no soporta reconocimiento de voz');
+                return;
+            }
+
+            // Configurar reconocimiento inteligente
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            
+            // Configuración inteligente
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'de-DE'; // Alemán por defecto, pero detectamos automáticamente
+            recognition.maxAlternatives = 5; // Más opciones para mejor detección
+
+            // Event listeners inteligentes
+            recognition.onstart = () => {
+                isListening = true;
+                updateVoiceState('listening', 'Escuchando...', '🎧');
+                voiceCircle.classList.add('listening');
+            };
+
+            recognition.onresult = (event) => {
+                const results = event.results[0];
+                let bestTranscript = '';
+                let confidence = 0;
+
+                // Análisis inteligente de resultados
+                for (let i = 0; i < results.length; i++) {
+                    const alternative = results[i];
+                    const text = alternative.transcript.toLowerCase();
+                    
+                    console.log(`Opción ${i}: "${alternative.transcript}" (${(alternative.confidence * 100).toFixed(1)}%)`);
+                    
+                    // Puntaje inteligente basado en palabras clave
+                    let score = alternative.confidence;
+                    
+                    // Bonus para palabras alemanas comunes
+                    const germanWords = ['hallo', 'wie', 'geht', 'dir', 'alles', 'klar', 'gut', 'danke', 'bitte', 'ich', 'bin'];
+                    const germanMatches = germanWords.filter(word => text.includes(word)).length;
+                    score += germanMatches * 0.2;
+                    
+                    // Bonus para palabras españolas comunes
+                    const spanishWords = ['hola', 'como', 'estas', 'bien', 'gracias', 'por', 'favor', 'que', 'tal'];
+                    const spanishMatches = spanishWords.filter(word => text.includes(word)).length;
+                    score += spanishMatches * 0.1;
+                    
+                    if (score > confidence) {
+                        confidence = score;
+                        bestTranscript = alternative.transcript;
+                    }
+                }
+
+                console.log(`Transcripción final: "${bestTranscript}" (confianza: ${(confidence * 100).toFixed(1)}%)`);
+                
+                if (bestTranscript.trim()) {
+                    handleIntelligentConversation(bestTranscript);
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Error de reconocimiento:', event.error);
+                if (event.error === 'not-allowed') {
+                    showError('Necesitas permitir acceso al micrófono');
+                } else {
+                    updateVoiceState('idle', 'Error - Haz clic para reintentar', '🎤');
+                }
+                resetVoiceState();
+            };
+
+            recognition.onend = () => {
+                if (!isProcessing && !isSpeaking) {
+                    resetVoiceState();
+                }
+            };
+
+            showMainScreen();
+        }
+
+        // Manejo inteligente de conversación
+        async function handleIntelligentConversation(userInput) {
+            if (isProcessing) return;
+            
+            isProcessing = true;
+            updateVoiceState('processing', 'Procesando...', '🧠');
+            
+            // NO MOSTRAR TRANSCRIPCIONES - conversación completamente por voz
+            // Las transcripciones se omiten para una experiencia más natural
+            
+            try {
+                // Enviar al tutor IA (usar test-chat por ahora para debugging)
+                const response = await fetch(`${API_BASE}/test-chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: userInput }),
+                });
+
+                const data = await response.json();
+                console.log('Respuesta del servidor:', data);
+
+                if (data.success && (data.response || data.message)) {
+                    // Solo voz, sin mostrar texto en pantalla
+                    const tutorResponse = data.response || data.message;
+                    
+                    // Síntesis de voz automática usando Azure TTS
+                    await speakResponse(tutorResponse);
+                    
+                    // Auto-reactivar después de 1.5 segundos para conversación más fluida
+                    setTimeout(() => {
+                        if (!isListening && !isProcessing && !isSpeaking) {
+                            autoActivateListening();
+                        }
+                    }, 1500);
+                    
+                } else {
+                    console.error('Error en respuesta:', data);
+                    const errorMsg = data.error || data.message || 'Lo siento, hubo un problema. ¿Puedes repetir?';
+                    addMessage('tutor', `Error: ${errorMsg}`);
+                    updateVoiceState('idle', 'Haz clic para continuar', '🎤');
+                }
+            } catch (err) {
+                console.error('Error en conversación:', err);
+                addMessage('tutor', 'Error de conexión. Intenta de nuevo.');
+                updateVoiceState('idle', 'Error - Haz clic para continuar', '🎤');
+            } finally {
+                isProcessing = false;
+            }
+        }
+
+        // Limpiar texto para voz natural
+        function cleanTextForSpeech(text) {
+            return text
+                .replace(/😊|😄|😃|🙂|😌|🤔|👍|💪|🎉|🚀|✨|💯|🔥|⭐|🌟|❤️|💙|💚|💛|🧡|💜|🤝|👏|🙌|🤗|😍|😘|😗|😙|😚|🥰|😇|🙃|😉|😋|😎|🤓|🧐|🤨|🤪|😜|😝|😛|🤑|🤗|🤭|🤫|🤐|🤔|😴|😪|😵|🤯|🥳|🥺|😢|😭|😤|😠|😡|🤬|😱|😨|😰|😥|😓|🤤|🤢|🤮|🤧|🥵|🥶|😶|😐|😑|😬|🙄|😯|😦|😧|😮|😲|🥱|😴|🤤|🌚|🌝/g, '')
+                .replace(/[🎤🎧🔊🎵🎶🎼🎹🥁🎷🎺🎸🎻]/g, '')
+                .replace(/[📱💻🖥️⌨️🖱️💾💿📀🎮🕹️]/g, '')
+                .replace(/[🚗🚕🚙🚌🚎🏎️🚓🚑🚒🚐🛻🚚🚛🚜]/g, '')
+                .replace(/[⚽🏀🏈⚾🥎🎾🏐🏉🥏🎱🪀🏓🏸🏒🏑🥍🏏🪃🥅⛳]/g, '')
+                .replace(/[\u{1F600}-\u{1F64F}]/gu, '')  // Emoticons
+                .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')  // Symbols & pictographs
+                .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')  // Transport & map symbols
+                .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')  // Flags
+                .replace(/[\u{2600}-\u{26FF}]/gu, '')    // Miscellaneous symbols
+                .replace(/[\u{2700}-\u{27BF}]/gu, '')    // Dingbats
+                .trim();
+        }
+
+        // Síntesis de voz Azure TTS FORZADA
+        async function speakResponse(text) {
+            updateVoiceState('speaking', 'Azure TTS hablando...', '🔊');
+            isSpeaking = true;
+            voiceCircle.classList.add('speaking');
+
+            console.log('🎤 FORZANDO Azure TTS para:', text);
+            console.log('🔑 Token disponible:', currentToken ? 'SÍ' : 'NO');
+            console.log('👤 Modo usuario:', currentUser?.type || 'normal');
+
+            try {
+                // SIEMPRE usar Azure TTS (debug endpoint sin autenticación)
+                console.log('🎯 FORZANDO Azure TTS con endpoint debug (sin autenticación)');
+                
+                // Usar Azure TTS debug para todos los modos
+                await forceAzureTTS(text);
+                return;
+                
+                // Modo premium con Azure TTS - USANDO DEBUG ENDPOINT
+                console.log('🎯 Modo Premium: FORZANDO Azure TTS con voces multilingües');
+                console.log('🔧 Usando endpoint DEBUG (sin autenticación)');
+
+                const response = await fetch(`${API_BASE}/debug/tts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: 'natural', // Premium multilingual voices
+                        language: 'auto', // Auto-detect German vs Spanish
+                        speed: 'fast'     // Faster, more natural speed
+                    }),
+                });
+
+                console.log('📡 Status de respuesta TTS:', response.status);
+                
+                if (!response.ok) {
+                    console.error('❌ Error HTTP:', response.status, response.statusText);
+                    const errorText = await response.text();
+                    console.error('❌ Detalle del error:', errorText);
+                    
+                    // Fallback a TTS del navegador si Azure falla
+                    console.log('🔄 Azure TTS falló, usando TTS del navegador');
+                    await fallbackBrowserTTS(text);
+                    return;
+                }
+
+                const data = await response.json();
+                console.log('✅ Respuesta Azure TTS exitosa:', {
+                    success: data.success,
+                    detectedLanguage: data.detectedLanguage,
+                    voiceUsed: data.voiceUsed,
+                    speechRate: data.speechRate
+                });
+                
+                // Mostrar detección de idioma en el indicador de estado
+                const langEmoji = data.detectedLanguage === 'es-ES' ? '🇪🇸' : '🇩🇪';
+                const langName = data.detectedLanguage === 'es-ES' ? 'Español' : 'Deutsch';
+                updateVoiceState('speaking', `${langEmoji} ${langName} - Azure`, '🔊');
+
+                if (data.success && data.audioData) {
+                    console.log('🔊 Reproduciendo audio de Azure TTS...');
+                    await playAudio(data.audioData);
+                    console.log('✅ Audio Azure TTS completado');
+                } else {
+                    console.error('❌ Azure TTS falló:', data.error);
+                    await fallbackBrowserTTS(text);
+                }
+            } catch (err) {
+                console.error('❌ Error crítico Azure TTS:', err);
+                console.log('🔄 Usando TTS del navegador como último recurso');
+                await fallbackBrowserTTS(text);
+            } finally {
+                isSpeaking = false;
+                resetVoiceState();
+            }
+        }
+
+        // TTS del navegador mejorado para modo demo
+        async function fallbackBrowserTTS(text) {
+            return new Promise((resolve) => {
+                // Limpiar texto de emojis
+                const cleanText = text.replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '').trim();
+                
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(cleanText);
+                    
+                    // Detectar idioma básico para seleccionar voz
+                    const isSpanish = /\b(es|está|son|muy|pero|porque|que|qué|español|corrección|error)\b/i.test(cleanText);
+                    
+                    utterance.lang = isSpanish ? 'es-ES' : 'de-DE';
+                    utterance.rate = 1.1; // Más rápido que el default
+                    utterance.pitch = isSpanish ? 1.1 : 1.0;
+                    utterance.volume = 0.9;
+                    
+                    console.log(`🗣️ TTS Navegador: ${isSpanish ? '🇪🇸 Español' : '🇩🇪 Alemán'} - "${cleanText}"`);
+                    updateVoiceState('speaking', `${isSpanish ? '🇪🇸' : '🇩🇪'} TTS Navegador`, '🔊');
+                    
+                    utterance.onend = () => resolve();
+                    utterance.onerror = () => resolve();
+                    
+                    speechSynthesis.speak(utterance);
+                } else {
+                    console.log('❌ SpeechSynthesis no disponible');
+                    resolve();
+                }
+            });
+        }
+
+        // Funciones auxiliares para TTS
+        function cleanTextForTTS(text) {
+            return text
+                .replace(/[😊😄😃🙂😌🤔👍💪🎉🚀✨💯🔥⭐🌟❤️💙💚💛🧡💜🤝👏🙌🤗😍😘😗😙😚🥰😇🙃😉😋😎🤓🧐🤨🤪😜😝😛🤑🤗🤭🤫🤐🤔😴😪😵🤯🥳🥺😢😭😤😠😡🤬😱😨😰😥😓🤤🤢🤮🤧🥵🥶😶😐😑😬🙄😯😦😧😮😲🥱😴🤤🌚🌝]/g, '')
+                .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+                .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')
+                .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')
+                .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')
+                .replace(/[\u{2600}-\u{26FF}]/gu, '')
+                .replace(/[\u{2700}-\u{27BF}]/gu, '')
+                .trim();
+        }
+
+        function detectLanguageFromText(text) {
+            const lowerText = text.toLowerCase();
+            const germanWords = ['ich', 'du', 'er', 'sie', 'es', 'und', 'der', 'die', 'das', 'haben', 'sein', 'werden', 'wie', 'geht', 'hallo'];
+            const spanishWords = ['yo', 'tú', 'él', 'ella', 'y', 'el', 'la', 'tener', 'ser', 'estar', 'hola', 'como', 'estas'];
+            
+            const germanCount = germanWords.filter(word => lowerText.includes(word)).length;
+            const spanishCount = spanishWords.filter(word => lowerText.includes(word)).length;
+            
+            return spanishCount > germanCount ? 'es-ES' : 'de-DE';
+        }
+
+        // Función para FORZAR Azure TTS siempre
+        async function forceAzureTTS(text) {
+            try {
+                console.log('🔊 Azure TTS: Sintetizando texto:', text.substring(0, 50) + '...');
+                
+                const response = await fetch(`${API_BASE}/debug/tts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: cleanTextForTTS(text),
+                        voice: 'natural',
+                        language: detectLanguageFromText(text),
+                        speed: 'fast'
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('✅ Respuesta Azure TTS exitosa:', { voiceUsed: data.voiceUsed });
+
+                if (data.success && data.audioData) {
+                    console.log('🔊 Reproduciendo audio de Azure TTS...');
+                    console.log('🇪🇸 ' + (data.detectedLanguage === 'es-ES' ? 'Español' : 'Alemán') + ' - Azure');
+                    await playAudio(data.audioData);
+                } else {
+                    throw new Error('No se recibió audio válido de Azure TTS');
+                }
+            } catch (error) {
+                console.error('❌ Azure TTS falló:', error);
+                console.log('🗣️ Fallback: Usando TTS del navegador');
+                await fallbackBrowserTTS(text);
+            }
+        }
+
+        // Función de respaldo para TTS usando Azure Debug (legacy)
+        async function fallbackSpeech(text) {
+            try {
+                const response = await fetch(`${API_BASE}/debug/tts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: 'professional',
+                        language: 'de-DE',
+                        speed: 'medium'
+                    }),
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    await playAudio(data.audioData);
+                }
+            } catch (err) {
+                console.error('Error en TTS de respaldo:', err);
+            }
+        }
+
+        // Reproducir audio con control de interrupción
+        function playAudio(base64Audio) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const binaryString = window.atob(base64Audio);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    const blob = new Blob([bytes], { type: 'audio/wav' });
+                    
+                    // Detener audio anterior si existe
+                    if (currentAudio) {
+                        currentAudio.pause();
+                        currentAudio.currentTime = 0;
+                    }
+                    
+                    currentAudio = new Audio();
+                    currentAudio.src = URL.createObjectURL(blob);
+                    
+                    currentAudio.onended = () => {
+                        URL.revokeObjectURL(currentAudio.src);
+                        currentAudio = null;
+                        resolve();
+                    };
+                    
+                    currentAudio.onerror = () => {
+                        URL.revokeObjectURL(currentAudio.src);
+                        currentAudio = null;
+                        reject(new Error('Error playing audio'));
+                    };
+                    
+                    // Permitir interrupción con click
+                    currentAudio.addEventListener('pause', () => {
+                        if (currentAudio && currentAudio.currentTime > 0) {
+                            console.log('🛑 Audio interrumpido por usuario');
+                            URL.revokeObjectURL(currentAudio.src);
+                            currentAudio = null;
+                            resolve();
+                        }
+                    });
+                    
+                    currentAudio.play();
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+
+        // Función para interrumpir la voz actual
+        function stopCurrentSpeech() {
+            if (currentAudio) {
+                console.log('🛑 Interrumpiendo voz actual...');
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+                currentAudio = null;
+                isSpeaking = false;
+                resetVoiceState();
+            }
+            
+            // También detener speechSynthesis si está activo
+            if ('speechSynthesis' in window) {
+                speechSynthesis.cancel();
+            }
+        }
+
+        // Agregar mensaje a la conversación
+        function addMessage(type, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message-appear mb-4';
+            
+            if (type === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="flex justify-end">
+                        <div class="bg-blue-600 rounded-2xl rounded-br-sm px-6 py-4 max-w-lg">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-blue-200 text-sm">👤 Tú</span>
+                            </div>
+                            <p class="text-white">${content}</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="flex justify-start">
+                        <div class="bg-gray-700 rounded-2xl rounded-bl-sm px-6 py-4 max-w-lg">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-gray-300 text-sm">🤖 Tutor IA</span>
+                            </div>
+                            <p class="text-white">${content}</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            conversationDisplay.appendChild(messageDiv);
+            
+            // Ocultar instrucciones después del primer mensaje
+            if (!conversationActive) {
+                smartInstructions.style.display = 'none';
+                conversationActive = true;
+            }
+            
+            // Auto-scroll
+            messageDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Estados de voz
+        function updateVoiceState(state, text, icon) {
+            statusText.textContent = text;
+            statusIndicator.textContent = text;
+            voiceIcon.textContent = icon;
+            
+            // Limpiar clases anteriores
+            voiceCircle.classList.remove('listening', 'processing', 'speaking', 'voice-active');
+            
+            // Agregar nueva clase
+            if (state !== 'idle') {
+                voiceCircle.classList.add(state);
+            }
+        }
+
+        function resetVoiceState() {
+            isListening = false;
+            updateVoiceState('idle', 'Haz clic o di "Hola"', '🎤');
+        }
+
+        // Auto-activación inteligente
+        function autoActivateListening() {
+            if (!isListening && !isProcessing && !isSpeaking && recognition) {
+                recognition.start();
+            }
+        }
+
+        // Activación manual con interrupción inteligente
+        function startListening() {
+            // Primero, interrumpir cualquier voz actual
+            if (isSpeaking) {
+                console.log('🛑 Usuario quiere hablar - interrumpiendo voz');
+                stopCurrentSpeech();
+            }
+            
+            // Iniciar escucha si está disponible
+            if (!isListening && !isProcessing && recognition) {
+                recognition.start();
+            }
+        }
+
+        // Event Listeners
+        voiceCircle.addEventListener('click', startListening);
+
+        // Teclas de activación
+        document.addEventListener('keydown', (e) => {
+            if ((e.code === 'Space' || e.key === 'Enter') && !isListening && !isProcessing && !isSpeaking) {
+                e.preventDefault();
+                startListening();
+            }
+        });
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('tutor_token');
+            localStorage.removeItem('tutor_user');
+            currentToken = null;
+            currentUser = null;
+            conversationActive = false;
+            
+            mainScreen.classList.add('hidden');
+            loginScreen.classList.remove('hidden');
+            conversationDisplay.innerHTML = '';
+            smartInstructions.style.display = 'block';
+        });
+
+        // Funciones de UI
+        function showMainScreen() {
+            loadingScreen.classList.add('hidden');
+            loginScreen.classList.add('hidden');
+            mainScreen.classList.remove('hidden');
+            updateVoiceState('idle', 'Haz clic o di "Hola"', '🎤');
+        }
+
+        function showLoading(message) {
+            loadingScreen.classList.remove('hidden');
+            loginScreen.classList.add('hidden');
+            mainScreen.classList.add('hidden');
+            document.querySelector('#loadingScreen p').textContent = message;
+        }
+
+        function showError(message) {
+            document.getElementById('loginError').textContent = message;
+            document.getElementById('loginError').classList.remove('hidden');
+            
+            loadingScreen.classList.add('hidden');
+            loginScreen.classList.remove('hidden');
+            
+            setTimeout(() => {
+                document.getElementById('loginError').classList.add('hidden');
+            }, 5000);
+        }
+
+        // Auto-login si existe token
+        window.addEventListener('load', () => {
+            const token = localStorage.getItem('tutor_token');
+            const user = localStorage.getItem('tutor_user');
+            
+            if (token && user) {
+                currentToken = token;
+                currentUser = JSON.parse(user);
+                initializeVoiceSystem();
+            }
+        });
+    </script>
+</body>
+</html>

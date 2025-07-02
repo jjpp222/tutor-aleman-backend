@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇩🇪 Tutor Alemán - Voz Azure</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #fff, #ffeb3b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .voice-btn {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a5a);
+            color: white;
+            font-size: 3em;
+            cursor: pointer;
+            margin: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4);
+        }
+        .voice-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 15px 40px rgba(255, 107, 107, 0.6);
+        }
+        .voice-btn.listening {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            animation: pulse 1.5s infinite;
+        }
+        .voice-btn.speaking {
+            background: linear-gradient(45deg, #ffa726, #ff9800);
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        .status {
+            font-size: 1.2em;
+            margin: 20px 0;
+            min-height: 30px;
+        }
+        .chat {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px 15px;
+            border-radius: 10px;
+            opacity: 0;
+            animation: fadeIn 0.5s ease forwards;
+        }
+        .user-message {
+            background: rgba(66, 165, 245, 0.3);
+            margin-left: 50px;
+        }
+        .ai-message {
+            background: rgba(76, 175, 80, 0.3);
+            margin-right: 50px;
+        }
+        .tts-message {
+            background: rgba(255, 193, 7, 0.3);
+            margin-right: 50px;
+            border-left: 4px solid #ffc107;
+        }
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        .btn.active {
+            background: #4caf50;
+        }
+        .debug {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🇩🇪 Tutor Alemán</h1>
+        <p>Conversación por voz con Azure TTS</p>
+        
+        <button id="voiceBtn" class="voice-btn">🎤</button>
+        
+        <div id="status" class="status">Presiona el micrófono para hablar</div>
+        
+        <div class="controls">
+            <button class="btn" onclick="testTTS('Hola, soy tu tutor de alemán')">🇪🇸 Test Español</button>
+            <button class="btn" onclick="testTTS('Hallo, ich bin dein Deutsch-Tutor')">🇩🇪 Test Alemán</button>
+            <button class="btn" onclick="clearChat()">🗑️ Limpiar</button>
+        </div>
+        
+        <div id="chat" class="chat"></div>
+        
+        <div class="debug">
+            <div>Backend: <span id="backend-status">❓</span></div>
+            <div>TTS: <span id="tts-status">❓</span></div>
+            <div>Chat: <span id="chat-status">❓</span></div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE = 'https://tutor-aleman-api-v2-d4aabgcvapg0ekfj.westeurope-01.azurewebsites.net/api';
+        
+        // DOM Elements
+        const voiceBtn = document.getElementById('voiceBtn');
+        const status = document.getElementById('status');
+        const chat = document.getElementById('chat');
+        const backendStatus = document.getElementById('backend-status');
+        const ttsStatus = document.getElementById('tts-status');
+        const chatStatus = document.getElementById('chat-status');
+        
+        // State
+        let recognition = null;
+        let isListening = false;
+        let isSpeaking = false;
+        let currentAudio = null;
+
+        // Initialize
+        window.addEventListener('load', initialize);
+
+        async function initialize() {
+            addMessage('🤖 Inicializando sistema...', 'ai');
+            
+            // Test backend connectivity
+            try {
+                const response = await fetch(`${API_BASE}/hello`);
+                const data = await response.json();
+                backendStatus.textContent = '✅ Conectado';
+                addMessage('✅ Backend conectado', 'ai');
+            } catch (error) {
+                backendStatus.textContent = '❌ Error';
+                addMessage('❌ Error conectando al backend: ' + error.message, 'ai');
+                return;
+            }
+
+            // Test TTS
+            ttsStatus.textContent = '⏳ Probando...';
+            const ttsWorking = await testTTS('Sistema iniciado correctamente', false);
+            ttsStatus.textContent = ttsWorking ? '✅ Funcionando' : '❌ Error';
+
+            // Test Chat
+            chatStatus.textContent = '⏳ Probando...';
+            const chatWorking = await testChat('test', false);
+            chatStatus.textContent = chatWorking ? '✅ Funcionando' : '❌ Error';
+
+            // Initialize speech recognition
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'de-DE';
+
+                recognition.onstart = () => {
+                    isListening = true;
+                    voiceBtn.classList.add('listening');
+                    voiceBtn.textContent = '🎧';
+                    status.textContent = 'Escuchando... (Habla en alemán o español)';
+                };
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    addMessage('🎤 ' + transcript, 'user');
+                    handleUserInput(transcript);
+                };
+
+                recognition.onend = () => {
+                    isListening = false;
+                    voiceBtn.classList.remove('listening');
+                    voiceBtn.textContent = '🎤';
+                    if (!isSpeaking) {
+                        status.textContent = 'Presiona el micrófono para hablar';
+                    }
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    addMessage('❌ Error de reconocimiento: ' + event.error, 'ai');
+                };
+
+                addMessage('🎤 Sistema de voz listo. Presiona el micrófono para hablar.', 'ai');
+                status.textContent = 'Sistema listo. Presiona el micrófono para empezar.';
+            } else {
+                addMessage('❌ Tu navegador no soporta reconocimiento de voz', 'ai');
+            }
+        }
+
+        // Voice button click handler
+        voiceBtn.addEventListener('click', () => {
+            if (isListening) {
+                recognition.stop();
+            } else if (isSpeaking && currentAudio) {
+                stopSpeaking();
+            } else if (recognition) {
+                recognition.start();
+            }
+        });
+
+        // Handle user input (voice or text)
+        async function handleUserInput(text) {
+            status.textContent = 'Procesando...';
+            
+            try {
+                // Send to AI chat
+                const response = await fetch(`${API_BASE}/test-chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: text
+                    }),
+                });
+
+                const data = await response.json();
+                
+                if (data.success && data.message) {
+                    addMessage('🤖 ' + data.message, 'ai');
+                    
+                    // Convert response to speech
+                    await speakText(data.message);
+                } else {
+                    throw new Error('No response from AI');
+                }
+            } catch (error) {
+                console.error('Chat error:', error);
+                addMessage('❌ Error en el chat: ' + error.message, 'ai');
+                status.textContent = 'Error en el chat';
+            }
+        }
+
+        // Text to Speech
+        async function speakText(text) {
+            if (isSpeaking) return;
+            
+            isSpeaking = true;
+            voiceBtn.classList.add('speaking');
+            voiceBtn.textContent = '🔊';
+            status.textContent = 'Generando voz...';
+
+            try {
+                const response = await fetch(`${API_BASE}/debug/tts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: cleanTextForTTS(text),
+                        voice: 'natural',
+                        language: detectLanguage(text),
+                        speed: 'fast'
+                    }),
+                });
+
+                const data = await response.json();
+                
+                if (data.success && data.audioData) {
+                    addMessage(`🔊 Azure TTS (${data.voiceUsed})`, 'tts');
+                    status.textContent = `Reproduciendo... (${data.detectedLanguage})`;
+                    
+                    // Play audio
+                    const audioBlob = base64ToBlob(data.audioData, 'audio/wav');
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    currentAudio = new Audio(audioUrl);
+                    
+                    currentAudio.onplay = () => {
+                        status.textContent = 'Reproduciendo Azure TTS...';
+                    };
+                    
+                    currentAudio.onended = () => {
+                        finishSpeaking();
+                        URL.revokeObjectURL(audioUrl);
+                        status.textContent = 'Presiona el micrófono para responder';
+                    };
+                    
+                    currentAudio.onerror = (e) => {
+                        console.error('Audio playback error:', e);
+                        addMessage('❌ Error reproduciendo audio', 'ai');
+                        finishSpeaking();
+                    };
+                    
+                    await currentAudio.play();
+                } else {
+                    throw new Error('No audio received from TTS');
+                }
+            } catch (error) {
+                console.error('TTS error:', error);
+                addMessage('❌ Error en TTS: ' + error.message, 'ai');
+                finishSpeaking();
+            }
+        }
+
+        function finishSpeaking() {
+            isSpeaking = false;
+            voiceBtn.classList.remove('speaking');
+            voiceBtn.textContent = '🎤';
+            currentAudio = null;
+        }
+
+        function stopSpeaking() {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+                finishSpeaking();
+                status.textContent = 'Audio detenido';
+            }
+        }
+
+        // Test functions
+        async function testTTS(text, showMessage = true) {
+            try {
+                const response = await fetch(`${API_BASE}/debug/tts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: 'natural',
+                        language: detectLanguage(text),
+                        speed: 'fast'
+                    }),
+                });
+
+                const data = await response.json();
+                
+                if (data.success && data.audioData) {
+                    if (showMessage) {
+                        addMessage(`🔊 Test TTS: "${text}"`, 'user');
+                        addMessage(`✅ Azure TTS funcionando (${data.voiceUsed})`, 'tts');
+                    }
+                    
+                    // Play audio
+                    const audioBlob = base64ToBlob(data.audioData, 'audio/wav');
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+                    
+                    return true;
+                } else {
+                    if (showMessage) {
+                        addMessage('❌ Test TTS falló', 'ai');
+                    }
+                    return false;
+                }
+            } catch (error) {
+                if (showMessage) {
+                    addMessage('❌ Error en test TTS: ' + error.message, 'ai');
+                }
+                return false;
+            }
+        }
+
+        async function testChat(message, showMessage = true) {
+            try {
+                const response = await fetch(`${API_BASE}/test-chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message
+                    }),
+                });
+
+                const data = await response.json();
+                
+                if (data.success && data.message) {
+                    if (showMessage) {
+                        addMessage('🤖 ' + data.message, 'ai');
+                    }
+                    return true;
+                } else {
+                    return false;
+                }
+            } catch (error) {
+                return false;
+            }
+        }
+
+        // Utility functions
+        function addMessage(text, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            messageDiv.textContent = text;
+            chat.appendChild(messageDiv);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function clearChat() {
+            chat.innerHTML = '';
+            addMessage('🗑️ Chat limpiado', 'ai');
+        }
+
+        function detectLanguage(text) {
+            const lowerText = text.toLowerCase();
+            const germanWords = ['ich', 'du', 'er', 'sie', 'es', 'und', 'der', 'die', 'das', 'haben', 'sein', 'werden', 'wie', 'geht', 'hallo', 'gut', 'danke'];
+            const spanishWords = ['yo', 'tú', 'él', 'ella', 'y', 'el', 'la', 'tener', 'ser', 'estar', 'hola', 'como', 'estas', 'bien', 'gracias'];
+            
+            const germanCount = germanWords.filter(word => lowerText.includes(word)).length;
+            const spanishCount = spanishWords.filter(word => lowerText.includes(word)).length;
+            
+            return spanishCount > germanCount ? 'es-ES' : 'de-DE';
+        }
+
+        function cleanTextForTTS(text) {
+            return text
+                .replace(/[😊😄😃🙂😌🤔👍💪🎉🚀✨💯🔥⭐🌟❤️💙💚💛🧡💜🤝👏🙌🤗]/g, '')
+                .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+                .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')
+                .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')
+                .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')
+                .replace(/[\u{2600}-\u{26FF}]/gu, '')
+                .replace(/[\u{2700}-\u{27BF}]/gu, '')
+                .trim();
+        }
+
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+    </script>
+</body>
+</html>
