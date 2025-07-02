@@ -1,7 +1,5 @@
-// Azure OpenAI configuration
-const AZURE_OPENAI_ENDPOINT = process.env.AZURE_OPENAI_ENDPOINT;
-const AZURE_OPENAI_KEY = process.env.AZURE_OPENAI_KEY;
-const AZURE_OPENAI_DEPLOYMENT_NAME = process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
+const fetch = require('node-fetch');
+const { config, logWithContext, handleCorsPrelight, createErrorResponse, createSuccessResponse, validateInput } = require('../shared/utils');
 
 // German tutor system prompt
 const TUTOR_SYSTEM_PROMPT = `Eres un tutor profesional de alemán especializado en niveles B1 y B2 del Marco Común Europeo de Referencia para las Lenguas.
@@ -26,53 +24,24 @@ TEMAS SUGERIDOS: vida cotidiana, trabajo, viajes, cultura alemana, actualidad, p
 ¡Sé paciente, motivador y didáctico!`;
 
 module.exports = async function (context, req) {
-    context.log('Test Chat request received');
+    logWithContext(context, 'info', 'Test Chat request received');
 
-    // Set CORS headers
-    const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Content-Type': 'application/json'
-    };
-
-    // Handle OPTIONS request for CORS preflight
+    // Handle CORS preflight
     if (req.method === 'OPTIONS') {
-        context.res = {
-            status: 200,
-            headers: corsHeaders
-        };
+        handleCorsPrelight(context);
         return;
     }
 
     try {
-        // Validate environment variables
-        if (!AZURE_OPENAI_ENDPOINT || !AZURE_OPENAI_KEY || !AZURE_OPENAI_DEPLOYMENT_NAME) {
-            context.log.error('Missing Azure OpenAI configuration');
-            context.res = {
-                status: 500,
-                headers: corsHeaders,
-                body: {
-                    success: false,
-                    error: 'Azure OpenAI not configured'
-                }
-            };
-            return;
-        }
+        // Validate configuration
+        config.validate();
 
-        // Parse request body
+        // Parse and validate input
         const { message } = req.body || {};
-
-        // Validate input
-        if (!message || message.trim().length === 0) {
-            context.res = {
-                status: 400,
-                headers: corsHeaders,
-                body: {
-                    success: false,
-                    error: 'Message is required'
-                }
-            };
+        const validationErrors = validateInput({ message }, ['message']);
+        
+        if (validationErrors.length > 0) {
+            context.res = createErrorResponse(400, 'Invalid input', validationErrors);
             return;
         }
 
@@ -82,14 +51,14 @@ module.exports = async function (context, req) {
             { role: 'user', content: message.trim() }
         ];
 
-        context.log('Sending request to Azure OpenAI...');
+        logWithContext(context, 'info', 'Sending request to Azure OpenAI');
 
         // Call Azure OpenAI
-        const openaiResponse = await fetch(`${AZURE_OPENAI_ENDPOINT}/openai/deployments/${AZURE_OPENAI_DEPLOYMENT_NAME}/chat/completions?api-version=2024-02-15-preview`, {
+        const openaiResponse = await fetch(`${config.openai.endpoint}/openai/deployments/${config.openai.deploymentName}/chat/completions?api-version=2024-02-15-preview`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'api-key': AZURE_OPENAI_KEY
+                'api-key': config.openai.key
             },
             body: JSON.stringify({
                 messages: messages,
@@ -103,35 +72,21 @@ module.exports = async function (context, req) {
 
         if (!openaiResponse.ok) {
             const errorText = await openaiResponse.text();
-            context.log.error('Azure OpenAI API error:', errorText);
+            logWithContext(context, 'error', 'Azure OpenAI API error', errorText);
             throw new Error(`Azure OpenAI API failed: ${openaiResponse.status} ${openaiResponse.statusText}`);
         }
 
         const openaiData = await openaiResponse.json();
         const aiResponse = openaiData.choices[0]?.message?.content || 'Entschuldigung, ich konnte keine Antwort generieren.';
 
-        context.log('Azure OpenAI response received successfully');
+        logWithContext(context, 'info', 'Azure OpenAI response received successfully');
 
-        context.res = {
-            status: 200,
-            headers: corsHeaders,
-            body: {
-                success: true,
-                message: aiResponse,
-                timestamp: new Date().toISOString()
-            }
-        };
+        context.res = createSuccessResponse({
+            message: aiResponse
+        });
 
     } catch (error) {
-        context.log.error('Test Chat error:', error.message);
-        context.res = {
-            status: 500,
-            headers: corsHeaders,
-            body: {
-                success: false,
-                error: error.message,
-                timestamp: new Date().toISOString()
-            }
-        };
+        logWithContext(context, 'error', 'Test Chat error', error.message);
+        context.res = createErrorResponse(500, error.message);
     }
 };

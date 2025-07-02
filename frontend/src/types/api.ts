@@ -97,7 +97,7 @@ export interface AdminActionResponse {
 
 // Configuración de la API
 export const API_CONFIG = {
-  BASE_URL: 'https://tutor-aleman-api-v2-d4aabgcvapg0ekfj.westeurope-01.azurewebsites.net/api',
+  BASE_URL: 'https://tutor-aleman-backend-v4.azurewebsites.net/api',
   ENDPOINTS: {
     HEALTH: '/hello',
     LOGIN: '/loginuser',

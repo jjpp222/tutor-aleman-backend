@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇩🇪 Tutor Alemán - Test Local</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .app {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #fff, #ffd700);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: rgba(46, 204, 113, 0.3);
+            border: 1px solid #2ecc71;
+        }
+        .status.error {
+            background: rgba(231, 76, 60, 0.3);
+            border: 1px solid #e74c3c;
+        }
+        .status.info {
+            background: rgba(52, 152, 219, 0.3);
+            border: 1px solid #3498db;
+        }
+        button {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            border: none;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .logs {
+            text-align: left;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        input[type="text"]::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <h1>🇩🇪 Tutor Alemán</h1>
+        <p>Test de Funcionalidad del Backend</p>
+        
+        <div id="status" class="status info">
+            🔄 Iniciando pruebas...
+        </div>
+
+        <div class="test-section">
+            <h3>1. Test de Conectividad</h3>
+            <button onclick="testHello()">🏥 Test Health Check</button>
+            <div id="hello-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. Test de Chat con IA</h3>
+            <input type="text" id="chatInput" placeholder="Escribe un mensaje en alemán..." value="Hallo! Wie geht es dir?">
+            <button onclick="testChat()">💬 Test Chat</button>
+            <div id="chat-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. Test de Síntesis de Voz</h3>
+            <input type="text" id="ttsInput" placeholder="Texto para convertir a voz..." value="Guten Tag! Ich bin dein Deutschtutor.">
+            <button onclick="testTTS()">🔊 Test TTS</button>
+            <audio id="audioPlayer" controls style="width: 100%; margin-top: 10px; display: none;"></audio>
+            <div id="tts-result"></div>
+        </div>
+
+        <div class="logs" id="logs">
+            <div>📋 Registro de pruebas:</div>
+        </div>
+    </div>
+
+    <script>
+        // Configuración de API - ACTUALIZADA
+        const API_BASE = 'https://tutor-aleman-backend-v4.azurewebsites.net/api';
+        
+        // Logging
+        function log(message) {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            logs.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        // Test 1: Health Check
+        async function testHello() {
+            log('🏥 Iniciando test de Health Check...');
+            updateStatus('🔄 Probando conectividad...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/hello`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                log(`📡 Respuesta HTTP: ${response.status} ${response.statusText}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Health Check exitoso: ${JSON.stringify(data, null, 2)}`);
+                    document.getElementById('hello-result').innerHTML = `
+                        <div class="status success">
+                            ✅ Backend conectado correctamente<br>
+                            Status: ${data.status}<br>
+                            Mensaje: ${data.message}
+                        </div>
+                    `;
+                    updateStatus('✅ Backend funcionando correctamente', 'success');
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                log(`❌ Error en Health Check: ${error.message}`);
+                document.getElementById('hello-result').innerHTML = `
+                    <div class="status error">
+                        ❌ Error de conectividad<br>
+                        ${error.message}
+                    </div>
+                `;
+                updateStatus('❌ Error de conectividad con el backend', 'error');
+            }
+        }
+
+        // Test 2: Chat con IA
+        async function testChat() {
+            const input = document.getElementById('chatInput').value;
+            if (!input.trim()) {
+                alert('Por favor, escribe un mensaje');
+                return;
+            }
+
+            log(`💬 Iniciando test de chat con mensaje: "${input}"`);
+            updateStatus('🔄 Probando chat con IA...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/test-chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: input
+                    })
+                });
+                
+                log(`📡 Respuesta Chat HTTP: ${response.status}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Chat exitoso: ${data.success}`);
+                    document.getElementById('chat-result').innerHTML = `
+                        <div class="status success">
+                            ✅ Chat funcionando<br>
+                            <strong>Respuesta de IA:</strong><br>
+                            ${data.message || data.response}
+                        </div>
+                    `;
+                    updateStatus('✅ Chat con IA funcionando correctamente', 'success');
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(`HTTP ${response.status}: ${errorData.error || response.statusText}`);
+                }
+            } catch (error) {
+                log(`❌ Error en Chat: ${error.message}`);
+                document.getElementById('chat-result').innerHTML = `
+                    <div class="status error">
+                        ❌ Error en chat<br>
+                        ${error.message}
+                    </div>
+                `;
+                updateStatus('❌ Error en chat con IA', 'error');
+            }
+        }
+
+        // Test 3: Síntesis de Voz
+        async function testTTS() {
+            const input = document.getElementById('ttsInput').value;
+            if (!input.trim()) {
+                alert('Por favor, escribe texto para convertir');
+                return;
+            }
+
+            log(`🔊 Iniciando test de TTS con texto: "${input}"`);
+            updateStatus('🔄 Probando síntesis de voz...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/speech/synthesize-url`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: input,
+                        voice: 'natural',
+                        language: 'de-DE',
+                        speed: 'medium'
+                    })
+                });
+                
+                log(`📡 Respuesta TTS HTTP: ${response.status}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ TTS exitoso: ${data.success}`);
+                    
+                    if (data.audioData) {
+                        // Crear audio desde base64
+                        const audioBlob = base64ToBlob(data.audioData, 'audio/wav');
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        
+                        const audioPlayer = document.getElementById('audioPlayer');
+                        audioPlayer.src = audioUrl;
+                        audioPlayer.style.display = 'block';
+                        
+                        document.getElementById('tts-result').innerHTML = `
+                            <div class="status success">
+                                ✅ Síntesis de voz exitosa<br>
+                                Voz: ${data.voiceUsed}<br>
+                                Tamaño: ${data.audioLength} bytes<br>
+                                🎵 Audio generado correctamente
+                            </div>
+                        `;
+                        updateStatus('✅ Síntesis de voz funcionando correctamente', 'success');
+                    }
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(`HTTP ${response.status}: ${errorData.error || response.statusText}`);
+                }
+            } catch (error) {
+                log(`❌ Error en TTS: ${error.message}`);
+                document.getElementById('tts-result').innerHTML = `
+                    <div class="status error">
+                        ❌ Error en síntesis de voz<br>
+                        ${error.message}
+                    </div>
+                `;
+                updateStatus('❌ Error en síntesis de voz', 'error');
+            }
+        }
+
+        // Utilidad para convertir base64 a blob
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+
+        // Inicializar
+        window.onload = function() {
+            log('🚀 Frontend de pruebas cargado');
+            log(`🔗 API Base URL: ${API_BASE}`);
+            updateStatus('✅ Listo para probar', 'success');
+        };
+    </script>
+</body>
+</html>

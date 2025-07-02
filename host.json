@@ -2,10 +2,10 @@
   "version": "2.0",
   "functionTimeout": "00:10:00",
   "cors": {
-    "allowedOrigins": ["*"],
-    "allowedMethods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "allowedOrigins": ["https://localhost:3000", "https://localhost:8080", "https://*.netlify.app", "https://*.vercel.app", "https://*.azurestaticapps.net"],
+    "allowedMethods": ["GET", "POST", "OPTIONS"],
     "allowedHeaders": ["Content-Type", "Authorization", "X-Requested-With"],
-    "maxAge": 3600
+    "maxAge": 86400
   },
   "logging": {
     "applicationInsights": {

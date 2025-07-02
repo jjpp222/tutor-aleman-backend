@@ -2,7 +2,7 @@
 
 # Test script for TutorAleman Backend endpoints
 
-BASE_URL="https://tutor-aleman-api-v2-d4aabgcvapg0ekfj.westeurope-01.azurewebsites.net/api"
+BASE_URL="https://tutor-aleman-backend-v4.azurewebsites.net/api"
 
 echo "🧪 Testing TutorAleman Backend Endpoints..."
 echo "Base URL: $BASE_URL"
