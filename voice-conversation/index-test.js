@@ -1,14 +1,30 @@
 module.exports = async function (context, req) {
     context.log('Voice conversation test endpoint called');
 
+    // CORS headers
+    const corsHeaders = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Content-Type': 'application/json'
+    };
+
+    // Handle CORS preflight
+    if (req.method === 'OPTIONS') {
+        context.res = {
+            status: 200,
+            headers: corsHeaders
+        };
+        return;
+    }
+
     try {
-        context.log('Request body:', req.body);
         const { transcript } = req.body || {};
-        context.log('Extracted transcript:', transcript);
         
         if (!transcript) {
             context.res = {
                 status: 400,
+                headers: corsHeaders,
                 body: {
                     success: false,
                     error: 'transcript is required'
@@ -24,6 +40,7 @@ module.exports = async function (context, req) {
 
         context.res = {
             status: 200,
+            headers: corsHeaders,
             body: {
                 success: true,
                 germanResponse: mockGermanResponse,
@@ -42,6 +59,7 @@ module.exports = async function (context, req) {
         
         context.res = {
             status: 500,
+            headers: corsHeaders,
             body: {
                 success: false,
                 error: error.message,
