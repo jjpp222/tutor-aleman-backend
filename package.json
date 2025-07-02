@@ -11,6 +11,8 @@
     "@azure/functions": "^4.5.1",
     "@azure/cosmos": "^4.1.1",
     "@azure/storage-blob": "^12.17.0",
+    "microsoft-cognitiveservices-speech-sdk": "^1.35.0",
+    "openai": "^4.28.0",
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3"
   },
