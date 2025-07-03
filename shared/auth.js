@@ -5,7 +5,7 @@ const { DatabaseService } = require('./database');
 
 // ===== CONFIGURATION =====
 const config = {
-    jwtSecret: process.env.JWT_SECRET || 'fallback-secret-change-in-production',
+    jwtSecret: process.env.JWT_SECRET,
     jwtExpiration: '24h',
     saltRounds: 12,
     roles: {

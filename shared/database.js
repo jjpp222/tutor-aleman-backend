@@ -75,7 +75,7 @@ class DatabaseService {
     static async createUser(userData) {
         const container = database.container(config.containers.users);
         const user = {
-            id: generateUUID(),
+            id: uuidv4(),
             ...userData,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -161,7 +161,7 @@ class DatabaseService {
     static async createAccessRequest(requestData) {
         const container = database.container(config.containers.accessRequests);
         const request = {
-            id: generateUUID(),
+            id: uuidv4(),
             ...requestData,
             status: 'pending',
             createdAt: new Date().toISOString(),

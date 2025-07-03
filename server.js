@@ -3,6 +3,11 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 8080;
 
+// NOTE: This server.js file is typically used for local development or traditional Node.js deployments.
+// When deploying to Azure Functions, each function (e.g., auth-login/index.js) runs independently
+// and this Express server is generally NOT used. Ensure your Azure Functions are configured correctly
+// to handle requests directly.
+
 // Configurar CORS y headers de seguridad
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');

@@ -28,7 +28,8 @@
     "openai": "^4.28.0",
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
-    "node-fetch": "^2.6.12"
+    "node-fetch": "^2.6.12",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "azure-functions-core-tools": "^4.0.5455"
