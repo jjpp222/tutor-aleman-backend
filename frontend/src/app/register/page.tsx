@@ -69,14 +69,23 @@ export default function RegisterPage() {
     }
 
     try {
-      const { confirmPassword, ...dataToSend } = formData;
+      // Map frontend fields to backend fields
+      const backendData = {
+        email: formData.email,
+        password: formData.password,
+        name: formData.name,
+        surname: '', // Not collected in frontend, use empty string
+        germanLevel: formData.currentLevel,
+        motivation: formData.studyGoals,
+        institution: formData.nationality // Use nationality as institution for now
+      };
       
-      const response = await fetch('https://tutor-aleman-api-v2-d4aabgcvapg0ekfj.westeurope-01.azurewebsites.net/api/registeruser', {
+      const response = await fetch('https://tutor-aleman-backend-v4.azurewebsites.net/api/auth-register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(dataToSend),
+        body: JSON.stringify(backendData),
       });
 
       const data = await response.json();
