@@ -44,19 +44,19 @@ module.exports = async function (context, req) {
         
         // Voice Configuration Options (easy to test different voices)
         const voiceOptions = {
-            current: 'de-DE-AmalaNeural',
-            alternative1: 'de-DE-SabineNeural',
-            alternative2: 'de-DE-SeraphinaMultilingualNeural'
+            current: 'de-DE-SeraphinaMultilingualNeural',
+            alternative1: 'de-DE-AmalaNeural',
+            alternative2: 'de-DE-SabineNeural'
         };
         const selectedVoice = voiceOptions.current;
         
-        // Prosody Configuration Options
+        // Prosody Configuration Options (optimized for Seraphina Multilingual)
         const prosodyOptions = {
-            rate: "1.5",
-            pitch: "+8%",
-            volume: "+10%",
-            // Advanced pitch contour for more natural speech
-            contour: "(0%,+20Hz) (50%,+30Hz) (100%,+10Hz)"
+            rate: "1.2", // Slightly slower for better clarity
+            pitch: "+3%", // More natural pitch for multilingual voice
+            volume: "+15%", // Increased volume
+            // Optimized contour for natural multilingual speech
+            contour: "(0%,+15Hz) (50%,+25Hz) (100%,+8Hz)"
         };
 
         if (!openaiEndpoint || !openaiKey) {
@@ -163,7 +163,7 @@ Responde de forma natural y conversacional, como un tutor nativo alemán pacient
             <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="de-DE">
                 <voice name="${selectedVoice}">
                     <prosody rate="${prosodyOptions.rate}" pitch="${prosodyOptions.pitch}" volume="${prosodyOptions.volume}" contour="${prosodyOptions.contour}">
-                        <express-as style="conversational" styledegree="0.8">
+                        <express-as style="friendly" styledegree="0.9">
                             ${cleanResponse}
                         </express-as>
                     </prosody>
