@@ -1,10 +1,13 @@
 const fetch = require('node-fetch');
 
+// In-memory session storage (in production, use Redis or CosmosDB)
+let conversationSessions = new Map();
+
 module.exports = async function (context, req) {
     context.log('Voice conversation with GPT-4o and Azure TTS');
 
     try {
-        const { transcript } = req.body || {};
+        const { transcript, sessionId, conversationHistory = [] } = req.body || {};
         
         if (!transcript) {
             context.res = {
@@ -17,6 +20,17 @@ module.exports = async function (context, req) {
             return;
         }
 
+        // Generate session ID if not provided
+        const currentSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Get or create conversation history for this session
+        let sessionHistory = conversationSessions.get(currentSessionId) || [];
+        
+        // If conversationHistory is provided in request, use it (for frontend state)
+        if (conversationHistory.length > 0) {
+            sessionHistory = conversationHistory;
+        }
+
         context.log(`Processing transcript: ${transcript}`);
 
         // OpenAI Configuration
@@ -27,6 +41,23 @@ module.exports = async function (context, req) {
         // Speech Services Configuration
         const speechKey = process.env.AZURE_SPEECH_KEY;
         const speechRegion = process.env.AZURE_SPEECH_REGION || 'swedencentral';
+        
+        // Voice Configuration Options (easy to test different voices)
+        const voiceOptions = {
+            current: 'de-DE-AmalaNeural',
+            alternative1: 'de-DE-SabineNeural',
+            alternative2: 'de-DE-SeraphinaMultilingualNeural'
+        };
+        const selectedVoice = voiceOptions.current;
+        
+        // Prosody Configuration Options
+        const prosodyOptions = {
+            rate: "1.5",
+            pitch: "+8%",
+            volume: "+10%",
+            // Advanced pitch contour for more natural speech
+            contour: "(0%,+20Hz) (50%,+30Hz) (100%,+10Hz)"
+        };
 
         if (!openaiEndpoint || !openaiKey) {
             throw new Error('OpenAI credentials not configured');
@@ -56,10 +87,17 @@ TEMAS: vida cotidiana, trabajo, viajes, cultura alemana, planes, gustos.
 
 Responde de forma natural y conversacional, como un tutor nativo alemán paciente.`;
 
-        const messages = [
-            { role: 'system', content: prompt },
-            { role: 'user', content: transcript.trim() }
-        ];
+        // Build messages array with conversation history
+        const messages = [{ role: 'system', content: prompt }];
+        
+        // Add conversation history
+        sessionHistory.forEach(msg => {
+            messages.push(msg);
+        });
+        
+        // Add current user message
+        const currentUserMessage = { role: 'user', content: transcript.trim() };
+        messages.push(currentUserMessage);
 
         // STEP 1: Call OpenAI for German response
         context.log('Step 1: Calling OpenAI API...');
@@ -92,6 +130,19 @@ Responde de forma natural y conversacional, como un tutor nativo alemán pacient
         const germanResponse = openaiData.choices[0]?.message?.content || 'Entschuldigung, ich konnte nicht antworten.';
 
         context.log(`OpenAI response: ${germanResponse}`);
+        
+        // Update conversation history
+        const assistantMessage = { role: 'assistant', content: germanResponse };
+        sessionHistory.push(currentUserMessage);
+        sessionHistory.push(assistantMessage);
+        
+        // Limit history to last 20 messages (10 exchanges) to avoid token limits
+        if (sessionHistory.length > 20) {
+            sessionHistory = sessionHistory.slice(-20);
+        }
+        
+        // Store updated history in session
+        conversationSessions.set(currentSessionId, sessionHistory);
 
         // Clean response for speech synthesis
         const cleanResponse = germanResponse
@@ -110,9 +161,9 @@ Responde de forma natural y conversacional, como un tutor nativo alemán pacient
 
         const ssml = `
             <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="de-DE">
-                <voice name="de-DE-AmalaNeural">
-                    <prosody rate="1.3" pitch="+5%" volume="+10%">
-                        <express-as style="cheerful" styledegree="0.8">
+                <voice name="${selectedVoice}">
+                    <prosody rate="${prosodyOptions.rate}" pitch="${prosodyOptions.pitch}" volume="${prosodyOptions.volume}" contour="${prosodyOptions.contour}">
+                        <express-as style="conversational" styledegree="0.8">
                             ${cleanResponse}
                         </express-as>
                     </prosody>
@@ -152,8 +203,10 @@ Responde de forma natural y conversacional, como un tutor nativo alemán pacient
                 germanResponse: cleanResponse,
                 audioData: audioData,
                 transcript: transcript,
-                voiceUsed: audioData ? 'de-DE-AmalaNeural' : 'No Audio',
-                sessionId: `voice_${Date.now()}`,
+                voiceUsed: audioData ? selectedVoice : 'No Audio',
+                sessionId: currentSessionId,
+                conversationHistory: sessionHistory,
+                messageCount: sessionHistory.length,
                 timestamp: new Date().toISOString(),
                 pipeline: audioData ? 'GPT-4o + Azure TTS' : 'GPT-4o only'
             }
