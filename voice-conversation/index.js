@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const { requireStudent } = require('../shared/auth');
 
 // ===== CONSTANTS =====
 const MAX_TOKENS = 150;
@@ -30,6 +31,14 @@ module.exports = async function (context, req) {
     context.log('Voice conversation with GPT-4o and Azure TTS');
 
     try {
+        // ===== AUTHENTICATION =====
+        const isAuthenticated = await requireStudent(context, req);
+        if (!isAuthenticated) {
+            return; // Response already set by middleware
+        }
+
+        const user = req.user;
+        context.log(`Voice conversation request from student: ${user.email}`);
         const { transcript, sessionId, conversationHistory = [] } = req.body || {};
         
         if (!transcript) {
