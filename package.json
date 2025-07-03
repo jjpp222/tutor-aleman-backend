@@ -1,11 +1,24 @@
 {
   "name": "tutor-aleman-backend",
-  "version": "1.0.0",
-  "description": "Backend Azure Functions para Tutor de Alemán con IA",
+  "version": "2.0.0",
+  "description": "Backend Azure Functions para Tutor de Alemán con IA - Conversación continua con memoria",
   "main": "index.js",
   "scripts": {
     "start": "func start",
-    "test": "echo \"No tests configured\" && exit 0"
+    "deploy": "func azure functionapp publish tutor-aleman-backend-v4",
+    "test": "echo \"Backend tests not configured\" && exit 0",
+    "test-endpoints": "./test-endpoints.sh"
+  },
+  "keywords": [
+    "german-tutor",
+    "azure-functions",
+    "openai-gpt4o",
+    "azure-speech-services",
+    "voice-conversation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jjpp222/tutor-aleman-backend.git"
   },
   "dependencies": {
     "@azure/functions": "^4.5.1",

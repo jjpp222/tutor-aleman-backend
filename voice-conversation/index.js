@@ -1,7 +1,30 @@
 const fetch = require('node-fetch');
 
+// ===== CONSTANTS =====
+const MAX_TOKENS = 150;
+const MAX_HISTORY_MESSAGES = 20;
+const DEFAULT_REGION = 'swedencentral';
+const DEFAULT_DEPLOYMENT = 'gpt-4o';
+const SESSION_CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+
+// ===== SESSION MANAGEMENT =====
 // In-memory session storage (in production, use Redis or CosmosDB)
 let conversationSessions = new Map();
+let lastCleanup = Date.now();
+
+// Clean up old sessions periodically
+function cleanupOldSessions() {
+    const now = Date.now();
+    if (now - lastCleanup > SESSION_CLEANUP_INTERVAL) {
+        // Remove sessions older than 24 hours
+        for (const [sessionId, data] of conversationSessions.entries()) {
+            if (now - data.lastAccess > SESSION_CLEANUP_INTERVAL) {
+                conversationSessions.delete(sessionId);
+            }
+        }
+        lastCleanup = now;
+    }
+}
 
 module.exports = async function (context, req) {
     context.log('Voice conversation with GPT-4o and Azure TTS');
@@ -20,103 +43,121 @@ module.exports = async function (context, req) {
             return;
         }
 
+        // ===== SESSION MANAGEMENT =====
+        cleanupOldSessions();
+        
         // Generate session ID if not provided
         const currentSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
         // Get or create conversation history for this session
-        let sessionHistory = conversationSessions.get(currentSessionId) || [];
+        let sessionData = conversationSessions.get(currentSessionId) || { 
+            history: [], 
+            created: Date.now(),
+            lastAccess: Date.now()
+        };
         
-        // If conversationHistory is provided in request, use it (for frontend state)
-        if (conversationHistory.length > 0) {
-            sessionHistory = conversationHistory;
-        }
+        // Update last access time
+        sessionData.lastAccess = Date.now();
+        
+        // Use frontend-provided history if available (for state sync)
+        let sessionHistory = conversationHistory.length > 0 ? conversationHistory : sessionData.history;
 
         context.log(`Processing transcript: ${transcript}`);
 
-        // OpenAI Configuration
-        const openaiEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
-        const openaiKey = process.env.AZURE_OPENAI_KEY;
-        const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4o';
-
-        // Speech Services Configuration
-        const speechKey = process.env.AZURE_SPEECH_KEY;
-        const speechRegion = process.env.AZURE_SPEECH_REGION || 'swedencentral';
-        
-        // Voice Configuration Options (easy to test different voices)
-        const voiceOptions = {
-            current: 'de-DE-SeraphinaMultilingualNeural',
-            alternative1: 'de-DE-AmalaNeural',
-            alternative2: 'de-DE-SabineNeural'
+        // ===== CONFIGURATION =====
+        const config = {
+            openai: {
+                endpoint: process.env.AZURE_OPENAI_ENDPOINT,
+                key: process.env.AZURE_OPENAI_KEY,
+                deployment: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || DEFAULT_DEPLOYMENT,
+                apiVersion: '2024-02-15-preview'
+            },
+            speech: {
+                key: process.env.AZURE_SPEECH_KEY,
+                region: process.env.AZURE_SPEECH_REGION || DEFAULT_REGION
+            }
         };
-        const selectedVoice = voiceOptions.current;
         
-        // Prosody Configuration Options (optimized for Seraphina Multilingual)
-        const prosodyOptions = {
-            rate: "1.2", // Slightly slower for better clarity
-            pitch: "+3%", // More natural pitch for multilingual voice
-            volume: "+15%", // Increased volume
-            // Optimized contour for natural multilingual speech
-            contour: "(0%,+15Hz) (50%,+25Hz) (100%,+8Hz)"
+        // ===== VOICE CONFIGURATION =====
+        const voiceConfig = {
+            voices: {
+                premium: 'de-DE-SeraphinaMultilingualNeural',
+                standard: 'de-DE-AmalaNeural',
+                alternative: 'de-DE-SabineNeural'
+            },
+            prosody: {
+                rate: '1.2',
+                pitch: '+3%',
+                volume: '+15%',
+                contour: '(0%,+15Hz) (50%,+25Hz) (100%,+8Hz)',
+                style: 'friendly',
+                styleDegree: '0.9'
+            },
+            outputFormat: 'riff-24khz-16bit-mono-pcm'
         };
+        
+        const selectedVoice = voiceConfig.voices.premium;
 
-        if (!openaiEndpoint || !openaiKey) {
-            throw new Error('OpenAI credentials not configured');
+        // ===== VALIDATION =====
+        if (!config.openai.endpoint || !config.openai.key) {
+            throw new Error('Azure OpenAI credentials not configured');
+        }
+        
+        if (!config.speech.key) {
+            throw new Error('Azure Speech Services key not configured');
         }
 
-        if (!speechKey) {
-            throw new Error('Speech Services key not configured');
-        }
+        context.log(`Session: ${currentSessionId}, Messages: ${sessionHistory.length}`);
+        context.log(`OpenAI: ${config.openai.endpoint}, Speech: ${config.speech.region}`);
 
-        context.log(`OpenAI Endpoint: ${openaiEndpoint}`);
-        context.log(`Speech Region: ${speechRegion}`);
-        context.log(`Deployment: ${deploymentName}`);
+        // ===== AI PROMPT CONFIGURATION =====
+        const systemPrompt = `Du bist ein professioneller Deutschlehrer für Konversation auf B1-B2 Niveau.
 
-        // German tutor prompt optimized for voice conversation
-        const prompt = `Eres un tutor profesional de alemán especializado en conversación oral para niveles B1 y B2.
+WICHTIGE REGELN:
+- Antworte IMMER NUR auf Deutsch
+- Halte Antworten kurz (maximal 2-3 Sätze)
+- Passe dein Niveau an den Schüler an
+- Korrigiere Fehler natürlich im Gespräch
+- Bei schweren Fehlern: kurze Korrektur auf Deutsch
+- Sei geduldig und motivierend
+- Verwende B1-B2 Wortschatz
 
-IMPORTANTE: 
-- SIEMPRE responde ÚNICAMENTE en alemán
-- Mantén respuestas cortas (máximo 2-3 frases)
-- Adapta tu nivel al estudiante
-- Corrige errores de forma natural en la conversación
-- Si detectas errores graves, menciona la corrección brevemente en alemán
-- Sé paciente y motivador
-- Usa vocabulario apropiado para B1-B2
+THEMEN: Alltag, Arbeit, Reisen, deutsche Kultur, Pläne, Hobbys.
 
-TEMAS: vida cotidiana, trabajo, viajes, cultura alemana, planes, gustos.
+Antworte natürlich und gesprächig wie ein geduldiger deutscher Muttersprachler.`;
 
-Responde de forma natural y conversacional, como un tutor nativo alemán paciente.`;
-
-        // Build messages array with conversation history
-        const messages = [{ role: 'system', content: prompt }];
+        // ===== BUILD CONVERSATION CONTEXT =====
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            ...sessionHistory,
+            { role: 'user', content: transcript.trim() }
+        ];
         
-        // Add conversation history
-        sessionHistory.forEach(msg => {
-            messages.push(msg);
-        });
-        
-        // Add current user message
         const currentUserMessage = { role: 'user', content: transcript.trim() };
-        messages.push(currentUserMessage);
 
-        // STEP 1: Call OpenAI for German response
+        // ===== STEP 1: GENERATE AI RESPONSE =====
         context.log('Step 1: Calling OpenAI API...');
         
-        const openaiResponse = await fetch(`${openaiEndpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-02-15-preview`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'api-key': openaiKey
-            },
-            body: JSON.stringify({
-                messages: messages,
-                max_tokens: 150,
-                temperature: 0.7,
-                top_p: 0.9,
-                frequency_penalty: 0.2,
-                presence_penalty: 0.1
-            })
-        });
+        const openaiRequestBody = {
+            messages: messages,
+            max_tokens: MAX_TOKENS,
+            temperature: 0.7,
+            top_p: 0.9,
+            frequency_penalty: 0.2,
+            presence_penalty: 0.1
+        };
+        
+        const openaiResponse = await fetch(
+            `${config.openai.endpoint}/openai/deployments/${config.openai.deployment}/chat/completions?api-version=${config.openai.apiVersion}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'api-key': config.openai.key
+                },
+                body: JSON.stringify(openaiRequestBody)
+            }
+        );
 
         context.log(`OpenAI Response status: ${openaiResponse.status}`);
 
@@ -131,56 +172,67 @@ Responde de forma natural y conversacional, como un tutor nativo alemán pacient
 
         context.log(`OpenAI response: ${germanResponse}`);
         
-        // Update conversation history
+        // ===== UPDATE CONVERSATION HISTORY =====
         const assistantMessage = { role: 'assistant', content: germanResponse };
-        sessionHistory.push(currentUserMessage);
-        sessionHistory.push(assistantMessage);
+        sessionHistory.push(currentUserMessage, assistantMessage);
         
-        // Limit history to last 20 messages (10 exchanges) to avoid token limits
-        if (sessionHistory.length > 20) {
-            sessionHistory = sessionHistory.slice(-20);
+        // Limit history to prevent token overflow
+        if (sessionHistory.length > MAX_HISTORY_MESSAGES) {
+            sessionHistory = sessionHistory.slice(-MAX_HISTORY_MESSAGES);
         }
         
-        // Store updated history in session
-        conversationSessions.set(currentSessionId, sessionHistory);
+        // Update session data
+        sessionData.history = sessionHistory;
+        sessionData.lastAccess = Date.now();
+        conversationSessions.set(currentSessionId, sessionData);
 
-        // Clean response for speech synthesis
-        const cleanResponse = germanResponse
-            .replace(/[😊😄😃🙂😌🤔👍💪🎉🚀✨💯🔥⭐🌟❤️💙💚💛🧡💜🤝👏🙌🤗😍😘😗😙😚🥰😇🙃😉😋😎🤓🧐🤨🤪😜😝😛🤑🤗🤭🤫🤐🤔😴😪😵🤯🥳🥺😢😭😤😠😡🤬😱😨😰😥😓🤤🤢🤮🤧🥵🥶😶😐😑😬🙄😯😦😧😮😲🥱😴🤤🌚🌝]/g, '')
-            .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
-            .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')
-            .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')
-            .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')
-            .replace(/[\u{2600}-\u{26FF}]/gu, '')
-            .replace(/[\u{2700}-\u{27BF}]/gu, '')
-            .replace(/\s+/g, ' ')
-            .trim();
+        // ===== CLEAN TEXT FOR TTS =====
+        function cleanTextForTTS(text) {
+            return text
+                // Remove emojis and special characters
+                .replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emoticons
+                .replace(/[\u{1F300}-\u{1F5FF}]/gu, '') // Misc symbols
+                .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Transport
+                .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '') // Flags
+                .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Misc symbols
+                .replace(/[\u{2700}-\u{27BF}]/gu, '')   // Dingbats
+                // Normalize whitespace
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+        
+        const cleanResponse = cleanTextForTTS(germanResponse);
 
-        // STEP 2: Generate TTS with Azure Speech Services
+        // ===== STEP 2: GENERATE TTS AUDIO =====
         context.log('Step 2: Generating TTS audio...');
-
-        const ssml = `
-            <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="de-DE">
-                <voice name="${selectedVoice}">
-                    <prosody rate="${prosodyOptions.rate}" pitch="${prosodyOptions.pitch}" volume="${prosodyOptions.volume}" contour="${prosodyOptions.contour}">
-                        <express-as style="friendly" styledegree="0.9">
-                            ${cleanResponse}
+        
+        function generateSSML(text, voice, prosody) {
+            return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="de-DE">
+                <voice name="${voice}">
+                    <prosody rate="${prosody.rate}" pitch="${prosody.pitch}" volume="${prosody.volume}" contour="${prosody.contour}">
+                        <express-as style="${prosody.style}" styledegree="${prosody.styleDegree}">
+                            ${text}
                         </express-as>
                     </prosody>
                 </voice>
-            </speak>
-        `;
-
-        const ttsResponse = await fetch(`https://${speechRegion}.tts.speech.microsoft.com/cognitiveservices/v1`, {
-            method: 'POST',
-            headers: {
-                'Ocp-Apim-Subscription-Key': speechKey,
-                'Content-Type': 'application/ssml+xml',
-                'X-Microsoft-OutputFormat': 'riff-24khz-16bit-mono-pcm',
-                'User-Agent': 'TutorAleman/1.0'
-            },
-            body: ssml
-        });
+            </speak>`;
+        }
+        
+        const ssml = generateSSML(cleanResponse, selectedVoice, voiceConfig.prosody);
+        
+        const ttsResponse = await fetch(
+            `https://${config.speech.region}.tts.speech.microsoft.com/cognitiveservices/v1`,
+            {
+                method: 'POST',
+                headers: {
+                    'Ocp-Apim-Subscription-Key': config.speech.key,
+                    'Content-Type': 'application/ssml+xml',
+                    'X-Microsoft-OutputFormat': voiceConfig.outputFormat,
+                    'User-Agent': 'TutorAleman/1.0'
+                },
+                body: ssml
+            }
+        );
 
         context.log(`TTS Response status: ${ttsResponse.status}`);
 
@@ -195,21 +247,30 @@ Responde de forma natural y conversacional, como un tutor nativo alemán pacient
             // Continue without audio - still return the text response
         }
 
-        // STEP 3: Return complete response
+        // ===== STEP 3: RETURN RESPONSE =====
+        const responseData = {
+            success: true,
+            germanResponse: cleanResponse,
+            audioData: audioData,
+            transcript: transcript.trim(),
+            
+            // Session info
+            sessionId: currentSessionId,
+            conversationHistory: sessionHistory,
+            messageCount: sessionHistory.length,
+            
+            // Technical info
+            voiceUsed: audioData ? selectedVoice : 'No Audio',
+            pipeline: audioData ? 'GPT-4o + Azure TTS' : 'GPT-4o only',
+            timestamp: new Date().toISOString(),
+            
+            // Performance metrics
+            sessionCount: conversationSessions.size
+        };
+        
         context.res = {
             status: 200,
-            body: {
-                success: true,
-                germanResponse: cleanResponse,
-                audioData: audioData,
-                transcript: transcript,
-                voiceUsed: audioData ? selectedVoice : 'No Audio',
-                sessionId: currentSessionId,
-                conversationHistory: sessionHistory,
-                messageCount: sessionHistory.length,
-                timestamp: new Date().toISOString(),
-                pipeline: audioData ? 'GPT-4o + Azure TTS' : 'GPT-4o only'
-            }
+            body: responseData
         };
 
         context.log('Voice conversation completed successfully');
