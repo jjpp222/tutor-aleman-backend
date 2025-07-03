@@ -95,12 +95,12 @@ module.exports = async function (context, req) {
                 alternative: 'de-DE-SabineNeural'
             },
             prosody: {
-                rate: '1.2',
-                pitch: '+3%',
-                volume: '+15%',
-                contour: '(0%,+15Hz) (50%,+25Hz) (100%,+8Hz)',
-                style: 'friendly',
-                styleDegree: '0.9'
+                rate: '0.9',
+                pitch: '+2%',
+                volume: '+10%',
+                contour: '(0%,+8Hz) (50%,+12Hz) (100%,+5Hz)',
+                style: 'conversational',
+                styleDegree: '0.7'
             },
             outputFormat: 'riff-24khz-16bit-mono-pcm'
         };
