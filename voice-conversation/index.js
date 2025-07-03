@@ -95,17 +95,17 @@ module.exports = async function (context, req) {
                 alternative: 'de-DE-SabineNeural'
             },
             prosody: {
-                rate: '0.9',
-                pitch: '+2%',
-                volume: '+10%',
-                contour: '(0%,+8Hz) (50%,+12Hz) (100%,+5Hz)',
+                rate: '0.8',
+                pitch: '0%',
+                volume: '+5%',
+                contour: '(0%,+5Hz) (50%,+8Hz) (100%,+3Hz)',
                 style: 'conversational',
-                styleDegree: '0.7'
+                styleDegree: '0.5'
             },
             outputFormat: 'riff-24khz-16bit-mono-pcm'
         };
         
-        const selectedVoice = voiceConfig.voices.premium;
+        const selectedVoice = voiceConfig.voices.standard;
 
         // ===== VALIDATION =====
         if (!config.openai.endpoint || !config.openai.key) {
