@@ -23,3 +23,4 @@ jobs:
       with:
         app-name: 'tutor-aleman-backend-v4'
         publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+        respect-funcignore: true
