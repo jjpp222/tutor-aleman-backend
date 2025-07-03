@@ -19,3 +19,4 @@ This directory contains the production-ready German tutor application.
 
 Last updated: Thu Jul  3 10:31:39 CEST 2025
 
+# Test deployment workflow
