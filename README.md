@@ -1,6 +1,6 @@
 # Tutor Alemán - Production Backend
 
-This directory contains the production-ready German tutor application.
+This directory contains the production-ready German tutor application with authentication system.
 
 ## Deployment Structure
 - `index.html` - Main application (served by Azure Static Web Apps)
