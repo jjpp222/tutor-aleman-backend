@@ -5,8 +5,8 @@
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "methods": ["get", "post", "options"],
-      "route": "admin/requests"
+      "methods": ["get"],
+      "route": "admin/test"
     },
     {
       "type": "http",

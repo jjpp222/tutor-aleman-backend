@@ -1,5 +1,6 @@
 const { AuthService } = require('../shared/auth');
 const { DatabaseService } = require('../shared/database');
+const { parseRequestBody } = require('../shared/utils');
 
 module.exports = async function (context, req) {
     context.log('Student registration request');
@@ -19,6 +20,8 @@ module.exports = async function (context, req) {
         }
 
         // Extract registration data
+        const requestData = parseRequestBody(req);
+
         const {
             email,
             password,
@@ -27,7 +30,7 @@ module.exports = async function (context, req) {
             germanLevel,
             motivation,
             institution
-        } = req.body || {};
+        } = requestData || {};
 
         context.log(`Registration attempt for email: ${email}`);
 

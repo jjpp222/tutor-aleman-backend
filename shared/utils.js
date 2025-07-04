@@ -91,6 +91,51 @@ const logWithContext = (context, level, message, data = null) => {
     }
 };
 
+const parseRequestBody = (req) => {
+    // Try req.body first (should work in most cases)
+    if (req.body && typeof req.body === 'object') {
+        return req.body;
+    }
+    
+    // If req.body is a string, try to parse it
+    if (req.body && typeof req.body === 'string') {
+        try {
+            return JSON.parse(req.body);
+        } catch (parseError) {
+            console.log('Error parsing req.body string:', parseError.message);
+        }
+    }
+    
+    // Try req.rawBody as fallback
+    if (req.rawBody) {
+        try {
+            const rawBodyString = req.rawBody.toString();
+            return JSON.parse(rawBodyString);
+        } catch (parseError) {
+            console.log('Error parsing raw body:', parseError.message);
+        }
+    }
+    
+    // Try req.headers['content-type'] specific parsing
+    if (req.headers && req.headers['content-type'] && req.headers['content-type'].includes('application/json')) {
+        // For Azure Functions v4, sometimes the body is available in different properties
+        const possibleBodies = [req.body, req.rawBody, req.bufferBody];
+        for (const body of possibleBodies) {
+            if (body) {
+                try {
+                    const bodyString = typeof body === 'string' ? body : body.toString();
+                    return JSON.parse(bodyString);
+                } catch (parseError) {
+                    continue; // Try next body
+                }
+            }
+        }
+    }
+    
+    console.log('Unable to parse request body, available properties:', Object.keys(req));
+    return null;
+};
+
 module.exports = {
     getCorsHeaders,
     handleCorsPrelight,
@@ -99,5 +144,6 @@ module.exports = {
     validateInput,
     sanitizeTextForSpeech,
     logWithContext,
+    parseRequestBody,
     config
 };

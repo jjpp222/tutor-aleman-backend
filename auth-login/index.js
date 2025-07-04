@@ -1,4 +1,5 @@
 const { AuthService } = require('../shared/auth');
+const { parseRequestBody } = require('../shared/utils');
 
 module.exports = async function (context, req) {
     context.log('User login request');
@@ -17,10 +18,17 @@ module.exports = async function (context, req) {
             return;
         }
 
-        // Extract login data
-        context.log('Full request body:', req.body);
-        context.log('Request raw body:', req.rawBody);
-        const { email, password } = req.body || {};
+        // Extract login data - handle Azure Functions v4 JSON parsing issue
+        context.log('Request method:', req.method);
+        context.log('Request headers:', JSON.stringify(req.headers));
+        context.log('Request body type:', typeof req.body);
+        context.log('Request body:', req.body);
+        context.log('Request rawBody type:', typeof req.rawBody);
+        
+        const requestData = parseRequestBody(req);
+        context.log('Parsed request data:', requestData);
+        
+        const { email, password } = requestData || {};
 
         context.log(`Login attempt for email: ${email}`);
 

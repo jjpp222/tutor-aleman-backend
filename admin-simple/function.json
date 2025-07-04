@@ -3,10 +3,10 @@
     {
       "authLevel": "anonymous",
       "type": "httpTrigger",
-      "direction": "in",
+      "direction": "in", 
       "name": "req",
       "methods": ["get", "post", "options"],
-      "route": "admin/requests"
+      "route": "admin/simple"
     },
     {
       "type": "http",

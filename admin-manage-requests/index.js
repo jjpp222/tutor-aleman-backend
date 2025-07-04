@@ -1,16 +1,16 @@
 const { requireAdmin } = require('../shared/auth');
 const { DatabaseService } = require('../shared/database');
+const { parseRequestBody } = require('../shared/utils');
 
 module.exports = async function (context, req) {
     context.log('Admin manage requests');
 
     try {
         // ===== AUTHENTICATION =====
-        const isAuthenticated = await requireAdmin(context, req);
-        if (!isAuthenticated) {
+        const isAdmin = await requireAdmin(context, req);
+        if (!isAdmin) {
             return; // Response already set by middleware
         }
-
         const adminUser = req.user;
         context.log(`Admin request from: ${adminUser.email}`);
 
@@ -80,7 +80,7 @@ module.exports = async function (context, req) {
             
         } else if (req.method === 'POST') {
             // ===== APPROVE/REJECT REQUEST =====
-            const { requestId, action, adminNotes } = req.body || {};
+            const { requestId, action, adminNotes } = parseRequestBody(req) || {};
             
             // Validate input
             if (!requestId || !action) {
