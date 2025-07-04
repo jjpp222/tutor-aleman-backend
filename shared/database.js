@@ -1,5 +1,6 @@
 // ===== DATABASE MODELS & OPERATIONS =====
 const { CosmosClient } = require('@azure/cosmos');
+const { v4 } = require('uuid');
 
 // ===== CONFIGURATION =====
 const config = {
@@ -75,7 +76,7 @@ class DatabaseService {
     static async createUser(userData) {
         const container = database.container(config.containers.users);
         const user = {
-            id: uuidv4(),
+            id: v4(),
             ...userData,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -98,21 +99,21 @@ class DatabaseService {
     
     static async getUserById(userId) {
         const container = database.container(config.containers.users);
-        const { resource } = await container.item(userId).read();
+        const { resource } = await container.item(userId, userId).read();
         return resource;
     }
     
     static async updateUser(userId, updateData) {
         const container = database.container(config.containers.users);
-        const user = await this.getUserById(userId);
+        const { resource: user } = await container.item(userId, userId).read();
         
-        const updatedUser = {
-            ...user,
-            ...updateData,
-            updatedAt: new Date().toISOString()
-        };
+        // Update properties directly on the retrieved resource
+        for (const key in updateData) {
+            user[key] = updateData[key];
+        }
+        user.updatedAt = new Date().toISOString();
         
-        const { resource } = await container.item(userId).replace(updatedUser);
+        const { resource } = await container.item(userId, userId).replace(user);
         return resource;
     }
     
@@ -161,7 +162,7 @@ class DatabaseService {
     static async createAccessRequest(requestData) {
         const container = database.container(config.containers.accessRequests);
         const request = {
-            id: uuidv4(),
+            id: v4(),
             ...requestData,
             status: 'pending',
             createdAt: new Date().toISOString(),
@@ -202,17 +203,17 @@ class DatabaseService {
     
     static async updateAccessRequest(requestId, updateData, adminId) {
         const container = database.container(config.containers.accessRequests);
-        const request = await container.item(requestId).read();
+        const { resource: request } = await container.item(requestId, requestId).read();
         
         const updatedRequest = {
-            ...request.resource,
+            ...request,
             ...updateData,
             reviewedBy: adminId,
             reviewedAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
         
-        const { resource } = await container.item(requestId).replace(updatedRequest);
+        const { resource } = await container.item(requestId, requestId).replace(updatedRequest);
         return resource;
     }
     
@@ -238,15 +239,6 @@ class DatabaseService {
             return false;
         }
     }
-}
-
-// ===== UTILITY FUNCTIONS =====
-function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
 }
 
 module.exports = {

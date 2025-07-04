@@ -152,8 +152,16 @@ class AuthService {
             throw new Error('Invalid email or password');
         }
         
-        // Verify password
-        const isPasswordValid = await PasswordService.verify(password, user.hashedPassword);
+        // Debug logging
+        console.log('User found:', { id: user.id, email: user.email, hasPasswordHash: !!user.passwordHash, hasHashedPassword: !!user.hashedPassword });
+        
+        // Verify password (support both hashedPassword and passwordHash for backward compatibility)
+        const passwordHash = user.hashedPassword || user.passwordHash;
+        if (!passwordHash) {
+            throw new Error('User password data is missing or corrupted');
+        }
+        
+        const isPasswordValid = await PasswordService.verify(password, passwordHash);
         if (!isPasswordValid) {
             throw new Error('Invalid email or password');
         }

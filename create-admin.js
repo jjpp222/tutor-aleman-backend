@@ -1,5 +1,5 @@
 const { CosmosClient } = require('@azure/cosmos');
-const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
 // Cosmos DB configuration
@@ -9,23 +9,21 @@ const cosmosClient = new CosmosClient({
 });
 
 const database = cosmosClient.database('TutorAlemanDB');
-const usersContainer = database.container('users');
+const usersContainer = database.container('Users');
 
 async function createAdminUser() {
     const adminId = uuidv4();
     const adminEmail = 'admin@tutoraleman.com';
     const adminPassword = 'AdminPass123!';
     
-    // Create password hash (same method as registerUser.js)
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.createHash('sha256').update(adminPassword + salt).digest('hex');
-    const passwordHash = `${salt}:${hash}`;
+    // Create password hash using bcrypt
+    const passwordHash = await bcrypt.hash(adminPassword, 12); // 12 is the salt rounds
     
     const adminUser = {
         id: adminId,
         email: adminEmail,
         name: 'Administrador del Sistema',
-        passwordHash: passwordHash,
+        hashedPassword: passwordHash,
         role: 'admin',
         status: 'active', // Admin starts active
         dateOfBirth: '1990-01-01',
@@ -57,7 +55,7 @@ async function createAdminUser() {
         console.log('Admin user created successfully:');
         console.log('ID:', createdUser.id);
         console.log('Email:', createdUser.email);
-        console.log('Password:', adminPassword);
+        console.log('Password Hash:', createdUser.hashedPassword);
         
         return createdUser;
         

@@ -145,47 +145,57 @@ export const speechApi = {
 
 // Funciones de administración
 export const adminApi = {
-  getPendingUsers: async (): Promise<AdminUsersResponse> => {
+  getPendingRequests: async (status?: string): Promise<AdminUsersResponse> => {
+    const params = status ? { status } : {};
     const response: AxiosResponse<AdminUsersResponse> = await api.get(
-      API_CONFIG.ENDPOINTS.ADMIN_USERS
+      API_CONFIG.ENDPOINTS.ADMIN_USERS,
+      { params }
     );
     return response.data;
+  },
+
+  approveRequest: async (requestId: string, adminNotes?: string): Promise<AdminActionResponse> => {
+    const request = {
+      requestId,
+      action: 'approve',
+      adminNotes,
+    };
+    const response: AxiosResponse<AdminActionResponse> = await api.post(
+      API_CONFIG.ENDPOINTS.ADMIN_USERS,
+      request
+    );
+    return response.data;
+  },
+
+  rejectRequest: async (requestId: string, adminNotes?: string): Promise<AdminActionResponse> => {
+    const request = {
+      requestId,
+      action: 'reject',
+      adminNotes,
+    };
+    const response: AxiosResponse<AdminActionResponse> = await api.post(
+      API_CONFIG.ENDPOINTS.ADMIN_USERS,
+      request
+    );
+    return response.data;
+  },
+
+  // Mantener funciones antiguas para compatibilidad
+  getPendingUsers: async (): Promise<AdminUsersResponse> => {
+    return adminApi.getPendingRequests('pending');
   },
 
   approveUser: async (userId: string): Promise<AdminActionResponse> => {
-    const request: AdminActionRequest = {
-      userIdToApprove: userId,
-      action: 'approve',
-    };
-    const response: AxiosResponse<AdminActionResponse> = await api.post(
-      API_CONFIG.ENDPOINTS.ADMIN_USERS,
-      request
-    );
-    return response.data;
+    return adminApi.approveRequest(userId);
   },
 
   rejectUser: async (userId: string): Promise<AdminActionResponse> => {
-    const request: AdminActionRequest = {
-      userIdToApprove: userId,
-      action: 'reject',
-    };
-    const response: AxiosResponse<AdminActionResponse> = await api.post(
-      API_CONFIG.ENDPOINTS.ADMIN_USERS,
-      request
-    );
-    return response.data;
+    return adminApi.rejectRequest(userId);
   },
 
   deleteUser: async (userId: string): Promise<AdminActionResponse> => {
-    const request: AdminActionRequest = {
-      userIdToApprove: userId,
-      action: 'delete',
-    };
-    const response: AxiosResponse<AdminActionResponse> = await api.post(
-      API_CONFIG.ENDPOINTS.ADMIN_USERS,
-      request
-    );
-    return response.data;
+    // Esta función no existe en la API actual, pero mantenemos por compatibilidad
+    throw new Error('Delete user functionality not implemented in current API');
   },
 };
 

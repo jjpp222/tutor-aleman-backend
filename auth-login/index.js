@@ -18,6 +18,8 @@ module.exports = async function (context, req) {
         }
 
         // Extract login data
+        context.log('Full request body:', req.body);
+        context.log('Request raw body:', req.rawBody);
         const { email, password } = req.body || {};
 
         context.log(`Login attempt for email: ${email}`);

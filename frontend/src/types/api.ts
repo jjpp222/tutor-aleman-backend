@@ -78,21 +78,47 @@ export interface ApiError {
   error: string;
 }
 
+export interface AccessRequest {
+  id: string;
+  userId: string;
+  email: string;
+  name: string;
+  surname: string;
+  germanLevel: string;
+  motivation: string;
+  institution: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  adminNotes: string | null;
+}
+
 export interface AdminUsersResponse {
   success: boolean;
-  users: User[];
-  count: number;
+  requests: AccessRequest[];
+  totalRequests: number;
+  filters: {
+    status: string;
+  };
 }
 
 export interface AdminActionRequest {
-  userIdToApprove: string;
-  action: 'approve' | 'reject' | 'delete';
+  requestId: string;
+  action: 'approve' | 'reject';
+  adminNotes?: string;
 }
 
 export interface AdminActionResponse {
   success: boolean;
   message: string;
-  user?: Partial<User>;
+  request?: AccessRequest;
+  action: string;
+  reviewedBy?: {
+    id: string;
+    email: string;
+    name: string;
+  };
 }
 
 // Configuración de la API
@@ -100,13 +126,13 @@ export const API_CONFIG = {
   BASE_URL: 'https://tutor-aleman-backend-v4.azurewebsites.net/api',
   ENDPOINTS: {
     HEALTH: '/hello',
-    LOGIN: '/loginuser',
-    REGISTER: '/registeruser',
-    CHAT: '/chat',
+    LOGIN: '/auth/login',
+    REGISTER: '/auth/register',
+    CHAT: '/voice-conversation',
     TEST_CHAT: '/test-chat',
-    TTS: '/speech/synthesize-url',
+    TTS: '/speech-synthesize-url',
     STT: '/speech/transcribe',
-    ADMIN_USERS: '/users/admin',
+    ADMIN_USERS: '/admin/requests',
   },
 } as const;
 
