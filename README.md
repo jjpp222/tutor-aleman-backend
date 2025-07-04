@@ -1,4 +1,4 @@
-# Tutor Alemán - Production Frontend
+# Tutor Alemán - Production Backend
 
 This directory contains the production-ready German tutor application.
 
