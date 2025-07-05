@@ -27,56 +27,46 @@ module.exports = async function (context, req) {
                 context.log('Attempting to fetch access requests...');
                 requests = await DatabaseService.getAllAccessRequests(status);
                 context.log(`Successfully found ${requests.length} access requests.`);
+                
+                context.res = {
+                    status: 200,
+                    body: {
+                        success: true,
+                        requests: requests.map(request => ({
+                            id: request.id,
+                            userId: request.userId,
+                            email: request.email,
+                            name: request.name,
+                            surname: request.surname,
+                            germanLevel: request.germanLevel,
+                            motivation: request.motivation,
+                            institution: request.institution,
+                            status: request.status,
+                            createdAt: request.createdAt,
+                            reviewedBy: request.reviewedBy,
+                            reviewedAt: request.reviewedAt,
+                            adminNotes: request.adminNotes
+                        })),
+                        totalRequests: requests.length,
+                        filters: {
+                            status: status || 'all'
+                        }
+                    }
+                };
             } catch (dbError) {
                 context.log.error('Database error:', dbError.message);
                 context.log.error('Error stack:', dbError.stack);
                 
-                // Return mock data for now to unblock the admin panel
-                requests = [
-                    {
-                        id: "mock-1",
-                        userId: "user-1", 
-                        email: "test@example.com",
-                        name: "Test",
-                        surname: "User",
-                        germanLevel: "B1",
-                        motivation: "Learning German",
-                        institution: "Test School",
-                        status: "pending",
-                        createdAt: new Date().toISOString(),
-                        reviewedBy: null,
-                        reviewedAt: null,
-                        adminNotes: null
+                context.res = {
+                    status: 500,
+                    body: {
+                        success: false,
+                        error: 'Failed to fetch access requests',
+                        message: dbError.message,
+                        timestamp: new Date().toISOString()
                     }
-                ];
-                context.log('Using mock data due to database error');
+                };
             }
-            
-            context.res = {
-                status: 200,
-                body: {
-                    success: true,
-                    requests: requests.map(request => ({
-                        id: request.id,
-                        userId: request.userId,
-                        email: request.email,
-                        name: request.name,
-                        surname: request.surname,
-                        germanLevel: request.germanLevel,
-                        motivation: request.motivation,
-                        institution: request.institution,
-                        status: request.status,
-                        createdAt: request.createdAt,
-                        reviewedBy: request.reviewedBy,
-                        reviewedAt: request.reviewedAt,
-                        adminNotes: request.adminNotes
-                    })),
-                    totalRequests: requests.length,
-                    filters: {
-                        status: status || 'all'
-                    }
-                }
-            };
             
         } else if (req.method === 'POST') {
             // ===== APPROVE/REJECT REQUEST =====
