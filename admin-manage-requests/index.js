@@ -3,30 +3,31 @@ const { DatabaseService } = require('../shared/database');
 const { parseRequestBody } = require('../shared/utils');
 
 module.exports = async function (context, req) {
-    context.log('Admin manage requests');
+    context.log('Admin manage requests - START');
 
     try {
         // ===== AUTHENTICATION =====
         const isAdmin = await requireAdmin(context, req);
         if (!isAdmin) {
+            context.log('Admin manage requests - Authentication failed');
             return; // Response already set by middleware
         }
         const adminUser = req.user;
-        context.log(`Admin request from: ${adminUser.email}`);
+        context.log(`Admin manage requests - Admin request from: ${adminUser.email}`);
 
         // ===== HANDLE DIFFERENT METHODS =====
         
         if (req.method === 'GET') {
             // ===== GET ALL ACCESS REQUESTS =====
             const status = req.query.status; // Optional filter
-            context.log(`Fetching access requests with status: ${status || 'all'}`);
-            context.log(`Using container: ${DatabaseService.config.containers.accessRequests}`);
+            context.log(`Admin manage requests - Fetching access requests with status: ${status || 'all'}`);
+            context.log(`Admin manage requests - Using container: ${DatabaseService.config.containers.accessRequests}`);
             
             let requests = [];
             try {
-                context.log('Attempting to fetch access requests...');
+                context.log('Admin manage requests - Attempting to fetch access requests from DB...');
                 requests = await DatabaseService.getAllAccessRequests(status);
-                context.log(`Successfully found ${requests.length} access requests.`);
+                context.log(`Admin manage requests - Successfully found ${requests.length} access requests from DB.`);
                 
                 context.res = {
                     status: 200,
@@ -54,8 +55,8 @@ module.exports = async function (context, req) {
                     }
                 };
             } catch (dbError) {
-                context.log.error('Database error:', dbError.message);
-                context.log.error('Error stack:', dbError.stack);
+                context.log.error('Admin manage requests - Database error:', dbError.message);
+                context.log.error('Admin manage requests - Error stack:', dbError.stack);
                 
                 context.res = {
                     status: 500,
@@ -70,6 +71,7 @@ module.exports = async function (context, req) {
             
         } else if (req.method === 'POST') {
             // ===== APPROVE/REJECT REQUEST =====
+            context.log('Admin manage requests - Handling POST request to approve/reject.');
             const { requestId, action, adminNotes } = parseRequestBody(req) || {};
             
             // Validate input
@@ -138,7 +140,7 @@ module.exports = async function (context, req) {
             const userStatus = action === 'approve' ? 'approved' : 'rejected';
             await DatabaseService.updateUserStatus(request.userId, userStatus, adminUser.id);
             
-            context.log(`Access request ${action}d: ${request.id} by admin ${adminUser.id}`);
+            context.log(`Admin manage requests - Access request ${action}d: ${request.id} by admin ${adminUser.id}`);
             
             context.res = {
                 status: 200,
@@ -167,8 +169,8 @@ module.exports = async function (context, req) {
         }
 
     } catch (error) {
-        context.log.error('Admin manage requests error:', error.message);
-        context.log.error('Error stack:', error.stack);
+        context.log.error('Admin manage requests - General error:', error.message);
+        context.log.error('Admin manage requests - Error stack:', error.stack);
 
         context.res = {
             status: 500,
@@ -180,4 +182,5 @@ module.exports = async function (context, req) {
             }
         };
     }
+    context.log('Admin manage requests - END');
 };

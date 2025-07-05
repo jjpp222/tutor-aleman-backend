@@ -197,8 +197,18 @@ class DatabaseService {
         querySpec += ' ORDER BY c.createdAt DESC';
         
         const query = { query: querySpec, parameters };
-        const { resources } = await container.items.query(query).fetchAll();
-        return resources;
+        console.log('DatabaseService - getAllAccessRequests - Query:', JSON.stringify(query));
+        
+        try {
+            const { resources } = await container.items.query(query).fetchAll();
+            console.log('DatabaseService - getAllAccessRequests - Fetched resources count:', resources.length);
+            console.log('DatabaseService - getAllAccessRequests - Fetched resources (first 5):', JSON.stringify(resources.slice(0, 5)));
+            return resources;
+        } catch (error) {
+            console.error('DatabaseService - getAllAccessRequests - Error fetching data:', error.message);
+            console.error('DatabaseService - getAllAccessRequests - Error stack:', error.stack);
+            throw error;
+        }
     }
     
     static async updateAccessRequest(requestId, updateData, adminId) {
