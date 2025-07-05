@@ -129,7 +129,7 @@ Responde de forma natural y conversacional, como un tutor nativo alemán pacient
         const ssml = `
             <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="de-DE">
                 <voice name="de-DE-KatjaNeural">
-                    <prosody rate="1.0" pitch="+2%">
+                    <prosody rate="1.15" pitch="+2%">
                         <break time="200ms"/>
                         ${cleanResponse}
                         <break time="300ms"/>
