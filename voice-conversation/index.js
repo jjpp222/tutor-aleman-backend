@@ -1,4 +1,6 @@
 const fetch = require('node-fetch');
+const { DatabaseService } = require('../shared/database');
+const jwt = require('jsonwebtoken');
 
 module.exports = async function (context, req) {
     context.log('Voice conversation with corrected Speech Services key');
@@ -21,7 +23,7 @@ module.exports = async function (context, req) {
     }
 
     try {
-        const { transcript } = req.body || {};
+        const { transcript, sessionId } = req.body || {};
         
         if (!transcript) {
             context.res = {
@@ -35,7 +37,42 @@ module.exports = async function (context, req) {
             return;
         }
 
-        context.log(`Processing transcript: ${transcript}`);
+        // Extract userId from JWT token
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            context.res = {
+                status: 401,
+                headers: corsHeaders,
+                body: {
+                    success: false,
+                    error: 'Authorization token required'
+                }
+            };
+            return;
+        }
+
+        const token = authHeader.substring(7);
+        const jwtSecret = process.env.JWT_SECRET;
+        let decoded;
+        
+        try {
+            decoded = jwt.verify(token, jwtSecret);
+        } catch (error) {
+            context.res = {
+                status: 401,
+                headers: corsHeaders,
+                body: {
+                    success: false,
+                    error: 'Invalid token'
+                }
+            };
+            return;
+        }
+
+        const userId = decoded.userId;
+        const currentSessionId = sessionId || `session_${Date.now()}`;
+        
+        context.log(`Processing transcript: ${transcript} for user: ${userId}, session: ${currentSessionId}`);
 
         // OpenAI Configuration
         const openaiEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
@@ -58,26 +95,63 @@ module.exports = async function (context, req) {
         context.log(`Speech Region: ${speechRegion}`);
         context.log(`Keys configured - OpenAI: ${openaiKey ? 'YES' : 'NO'}, Speech: ${speechKey ? 'YES' : 'NO'}`);
 
+        // STEP 1: Handle conversation persistence
+        context.log('Step 1: Managing conversation persistence...');
+        
+        // Get or create active conversation
+        let conversation = await DatabaseService.getActiveConversation(userId, currentSessionId);
+        if (!conversation) {
+            conversation = await DatabaseService.createConversation(userId, currentSessionId);
+            context.log(`Created new conversation: ${conversation.id}`);
+        } else {
+            context.log(`Using existing conversation: ${conversation.id}`);
+        }
+
+        // Add user input to conversation
+        await DatabaseService.addExchangeToConversation(conversation.id, userId, {
+            speaker: 'user',
+            transcript: transcript,
+            language: 'de'
+        });
+
+        // Build conversation context for GPT-4o
+        const conversationHistory = await DatabaseService.buildConversationContext(conversation.id, userId);
+        context.log(`Conversation history: ${conversationHistory.length} messages`);
+
         // German tutor prompt optimized for voice
-        const prompt = `Eres un tutor profesional de alemán especializado en conversación oral para niveles B1 y B2.
+        const prompt = `Du bist ein freundlicher deutscher Sprachtutor für natürliche Konversation (B1-B2 Niveau).
 
-IMPORTANTE: 
-- SIEMPRE responde ÚNICAMENTE en alemán.
-- Mantén respuestas cortas (máximo 2-3 frases).
-- Adapta tu nivel al estudiante.
-- Corrige errores de forma natural en la conversación. NO repitas la frase entera, solo la parte corregida.
-- Sé paciente y motivador.
-- Usa vocabulario apropiado para B1-B2.
-- TIENES MEMORIA: Usa el historial de la conversación para dar respuestas coherentes.
-- Tu respuesta es para ser pronunciada oralmente. Por lo tanto, NO incluyas emojis, smilies, asteriscos, paréntesis, o cualquier otro símbolo que no deba ser pronunciado. Usa la puntuación estándar (comas, puntos, signos de interrogación/exclamación) para las pausas naturales en el habla.
+PERSÖNLICHKEIT:
+- Freundlich, geduldig und sympathisch
+- Natürlich gesprächig wie ein echter Deutscher
+- Verwende gelegentlich: "Also", "Na ja", "Genau", "Ach so"
+- Zeige echtes Interesse am Gespräch
 
-TEMAS: vida cotidiana, trabajo, viajes, cultura alemana, planes, gustos.
+KONVERSATION:
+- IMMER nur auf Deutsch antworten
+- Kurze, natürliche Antworten (1-3 Sätze)
+- Stelle Folgefragen um das Gespräch fortzusetzen
+- Reagiere natürlich: "Interessant!", "Wirklich?", "Das kann ich verstehen"
 
-Responde de forma natural y conversacional, como un tutor nativo alemán paciente.`;
+FEHLERKORREKTUR - SEHR WICHTIG:
+- Korrigiere NICHT ständig - das stört den Gesprächsfluss
+- Korrigiere nur bei wichtigen Fehlern oder wenn es das Verständnis beeinträchtigt
+- Wenn du korrigierst: Nur die falsche Stelle erwähnen, nicht den ganzen Satz wiederholen
+- Freundlich korrigieren: "Kleiner Tipp: man sagt..." oder "Genau, nur heißt es..."
+- Dann sofort mit dem normalen Gespräch weitermachen
+
+AUDIO-OPTIMIERT:
+- Keine Emojis, Smilies, Klammern, Asterisken oder andere Symbole
+- Nur normale Satzzeichen für natürliche Sprechpausen
+- Schreibe Wörter so wie sie gesprochen werden
+
+THEMEN: Alltag, Arbeit, Reisen, deutsche Kultur, Pläne, Hobbys.
+
+Führe eine fließende, natürliche Konversation - korrigiere nur wenn nötig, nicht bei jedem kleinen Fehler.`;
 
         const messages = [
             { role: 'system', content: prompt },
-            { role: 'user', content: transcript.trim() }
+            ...conversationHistory
         ];
 
         // STEP 1: Call OpenAI for German response
@@ -157,7 +231,16 @@ Responde de forma natural y conversacional, como un tutor nativo alemán pacient
             // Continue without audio - still return the text response
         }
 
-        // STEP 3: Return complete response
+        // STEP 3: Add tutor response to conversation
+        await DatabaseService.addExchangeToConversation(conversation.id, userId, {
+            speaker: 'tutor',
+            transcript: cleanResponse,
+            language: 'de'
+        });
+
+        context.log('Tutor response added to conversation');
+
+        // STEP 4: Return complete response
         context.res = {
             status: 200,
             headers: corsHeaders,
@@ -167,9 +250,12 @@ Responde de forma natural y conversacional, como un tutor nativo alemán pacient
                 audioData: audioData,
                 transcript: transcript,
                 voiceUsed: 'de-DE-KatjaNeural',
-                sessionId: `voice_${Date.now()}`,
+                sessionId: currentSessionId,
+                conversationId: conversation.id,
                 timestamp: new Date().toISOString(),
-                pipeline: 'OpenAI + TTS integrated'
+                pipeline: 'OpenAI + TTS integrated + Memory',
+                memoryEnabled: true,
+                conversationLength: conversationHistory.length
             }
         };
 

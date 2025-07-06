@@ -10,7 +10,8 @@ const config = {
     containers: {
         users: 'Users',
         sessions: 'Sessions',
-        accessRequests: 'AccessRequests'
+        accessRequests: 'AccessRequests',
+        conversations: 'ConversationTranscripts'
     }
 };
 
@@ -65,6 +66,39 @@ const AccessRequestSchema = {
     // Metadata
     createdAt: 'ISO8601',
     updatedAt: 'ISO8601'
+};
+
+// ===== CONVERSATION SCHEMA =====
+const ConversationSchema = {
+    id: 'string', // Auto-generated UUID
+    sessionId: 'string', // Session identifier
+    userId: 'string', // Reference to user (partition key)
+    startTime: 'ISO8601',
+    endTime: 'ISO8601', // null if active
+    status: 'active|completed|paused',
+    conversation: [
+        {
+            timestamp: 'ISO8601',
+            speaker: 'user|tutor',
+            originalAudio: 'string', // base64 audio data (optional)
+            transcript: 'string', // User input or AI response
+            language: 'string', // 'de' for German
+            corrections: [
+                {
+                    original: 'string',
+                    corrected: 'string',
+                    type: 'grammar|pronunciation|vocabulary'
+                }
+            ]
+        }
+    ],
+    metadata: {
+        totalExchanges: 'number',
+        duration: 'number', // in seconds
+        topicsDiscussed: ['string'],
+        errorsCorrections: 'number',
+        germanLevel: 'string'
+    }
 };
 
 // ===== DATABASE OPERATIONS =====
@@ -227,6 +261,129 @@ class DatabaseService {
         return resource;
     }
     
+    // ===== CONVERSATION OPERATIONS =====
+    
+    static async createConversation(userId, sessionId) {
+        const container = database.container(config.containers.conversations);
+        const conversation = {
+            id: v4(),
+            sessionId: sessionId,
+            userId: userId,
+            startTime: new Date().toISOString(),
+            endTime: null,
+            status: 'active',
+            conversation: [],
+            metadata: {
+                totalExchanges: 0,
+                duration: 0,
+                topicsDiscussed: [],
+                errorsCorrections: 0,
+                germanLevel: 'B1'
+            }
+        };
+        
+        const { resource } = await container.items.create(conversation);
+        return resource;
+    }
+    
+    static async getActiveConversation(userId, sessionId) {
+        const container = database.container(config.containers.conversations);
+        const query = {
+            query: 'SELECT * FROM c WHERE c.userId = @userId AND c.sessionId = @sessionId AND c.status = "active"',
+            parameters: [
+                { name: '@userId', value: userId },
+                { name: '@sessionId', value: sessionId }
+            ]
+        };
+        
+        const { resources } = await container.items.query(query).fetchAll();
+        return resources[0] || null;
+    }
+    
+    static async addExchangeToConversation(conversationId, userId, exchange) {
+        const container = database.container(config.containers.conversations);
+        const { resource: conversation } = await container.item(conversationId, userId).read();
+        
+        // Add new exchange to conversation array
+        conversation.conversation.push({
+            timestamp: new Date().toISOString(),
+            ...exchange
+        });
+        
+        // Update metadata
+        conversation.metadata.totalExchanges = conversation.conversation.length;
+        conversation.metadata.duration = Math.floor((new Date() - new Date(conversation.startTime)) / 1000);
+        
+        const { resource } = await container.item(conversationId, userId).replace(conversation);
+        return resource;
+    }
+    
+    static async endConversation(conversationId, userId) {
+        const container = database.container(config.containers.conversations);
+        const { resource: conversation } = await container.item(conversationId, userId).read();
+        
+        conversation.status = 'completed';
+        conversation.endTime = new Date().toISOString();
+        conversation.metadata.duration = Math.floor((new Date(conversation.endTime) - new Date(conversation.startTime)) / 1000);
+        
+        const { resource } = await container.item(conversationId, userId).replace(conversation);
+        return resource;
+    }
+    
+    static async getConversationHistory(userId, limit = 10) {
+        const container = database.container(config.containers.conversations);
+        const query = {
+            query: 'SELECT * FROM c WHERE c.userId = @userId ORDER BY c.startTime DESC OFFSET 0 LIMIT @limit',
+            parameters: [
+                { name: '@userId', value: userId },
+                { name: '@limit', value: limit }
+            ]
+        };
+        
+        const { resources } = await container.items.query(query).fetchAll();
+        return resources;
+    }
+    
+    static async buildConversationContext(conversationId, userId, maxTokens = 100000) {
+        const container = database.container(config.containers.conversations);
+        const { resource: conversation } = await container.item(conversationId, userId).read();
+        
+        if (!conversation) return [];
+        
+        // Convert conversation exchanges to GPT-4o message format
+        const messages = [];
+        let estimatedTokens = 0;
+        
+        // Process messages in reverse order (most recent first)
+        const reverseExchanges = [...conversation.conversation].reverse();
+        
+        for (const exchange of reverseExchanges) {
+            let newMessage = null;
+            
+            if (exchange.speaker === 'user') {
+                newMessage = { role: 'user', content: exchange.transcript };
+            } else if (exchange.speaker === 'tutor') {
+                newMessage = { role: 'assistant', content: exchange.transcript };
+            }
+            
+            if (newMessage) {
+                // Rough token estimation (1 token ≈ 4 characters for German)
+                const messageTokens = Math.ceil(newMessage.content.length / 3);
+                
+                if (estimatedTokens + messageTokens > maxTokens) {
+                    console.log(`Token limit reached. Truncating conversation history at ${messages.length} messages`);
+                    break;
+                }
+                
+                messages.unshift(newMessage); // Add to beginning to maintain chronological order
+                estimatedTokens += messageTokens;
+            }
+        }
+        
+        console.log(`Conversation context built: ${messages.length} messages, ~${estimatedTokens} tokens`);
+        return messages;
+    }
+    
     // ===== HELPER METHODS =====
     
     static async initializeDatabase() {
@@ -234,11 +391,18 @@ class DatabaseService {
             // Create database if it doesn't exist
             await client.databases.createIfNotExists({ id: config.databaseId });
             
-            // Create containers if they don't exist
-            for (const containerName of Object.values(config.containers)) {
+            // Create containers with specific partition keys
+            const containerConfigs = [
+                { name: config.containers.users, partitionKey: '/id' },
+                { name: config.containers.sessions, partitionKey: '/id' },
+                { name: config.containers.accessRequests, partitionKey: '/id' },
+                { name: config.containers.conversations, partitionKey: '/userId' }
+            ];
+            
+            for (const containerConfig of containerConfigs) {
                 await database.containers.createIfNotExists({ 
-                    id: containerName,
-                    partitionKey: { kind: 'Hash', paths: ['/id'] }
+                    id: containerConfig.name,
+                    partitionKey: { kind: 'Hash', paths: [containerConfig.partitionKey] }
                 });
             }
             
