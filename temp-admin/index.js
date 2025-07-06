@@ -3,7 +3,7 @@ const { app } = require('@azure/functions');
 app.http('temp-admin', {
     methods: ['GET', 'POST', 'OPTIONS'],
     authLevel: 'anonymous',
-    route: 'admin/simple',
+    route: 'admin/requests',
     handler: async (request, context) => {
         context.log('Temp admin endpoint accessed');
         
