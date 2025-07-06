@@ -62,13 +62,14 @@ module.exports = async function (context, req) {
         const prompt = `Eres un tutor profesional de alemán especializado en conversación oral para niveles B1 y B2.
 
 IMPORTANTE: 
-- SIEMPRE responde ÚNICAMENTE en alemán
-- Mantén respuestas cortas (máximo 2-3 frases)
-- Adapta tu nivel al estudiante
-- Corrige errores de forma natural en la conversación
-- Si detectas errores graves, menciona la corrección brevemente en alemán
-- Sé paciente y motivador
-- Usa vocabulario apropiado para B1-B2
+- SIEMPRE responde ÚNICAMENTE en alemán.
+- Mantén respuestas cortas (máximo 2-3 frases).
+- Adapta tu nivel al estudiante.
+- Corrige errores de forma natural en la conversación. NO repitas la frase entera, solo la parte corregida.
+- Sé paciente y motivador.
+- Usa vocabulario apropiado para B1-B2.
+- TIENES MEMORIA: Usa el historial de la conversación para dar respuestas coherentes.
+- Tu respuesta es para ser pronunciada oralmente. Por lo tanto, NO incluyas emojis, smilies, asteriscos, paréntesis, o cualquier otro símbolo que no deba ser pronunciado. Usa la puntuación estándar (comas, puntos, signos de interrogación/exclamación) para las pausas naturales en el habla.
 
 TEMAS: vida cotidiana, trabajo, viajes, cultura alemana, planes, gustos.
 
@@ -113,14 +114,8 @@ Responde de forma natural y conversacional, como un tutor nativo alemán pacient
 
         // Clean response for speech synthesis
         const cleanResponse = germanResponse
-            .replace(/[😊😄😃🙂😌🤔👍💪🎉🚀✨💯🔥⭐🌟❤️💙💚💛🧡💜🤝👏🙌🤗😍😘😗😙😚🥰😇🙃😉😋😎🤓🧐🤨🤪😜😝😛🤑🤗🤭🤫🤐🤔😴😪😵🤯🥳🥺😢😭😤😠😡🤬😱😨😰😥😓🤤🤢🤮🤧🥵🥶😶😐😑😬🙄😯😦😧😮😲🥱😴🤤🌚🌝]/g, '')
-            .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
-            .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')
-            .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')
-            .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')
-            .replace(/[\u{2600}-\u{26FF}]/gu, '')
-            .replace(/[\u{2700}-\u{27BF}]/gu, '')
-            .replace(/\s+/g, ' ')
+            .replace(/[^a-zA-Z0-9äöüÄÖÜß\s.,?!:;'-]/g, '') // Eliminar símbolos no pronunciables, mantener puntuación esencial
+            .replace(/\s+/g, ' ') // Reemplazar múltiples espacios con uno solo
             .trim();
 
         // STEP 2: Generate TTS with corrected Speech Services
