@@ -45,6 +45,49 @@ module.exports = async function (context, req) {
                     endpoint: 'panel-admin'
                 }
             };
+        } else if (req.method === 'POST') {
+            context.log('Panel Admin - Processing request...');
+            
+            const { parseRequestBody } = require('../shared/utils');
+            const requestBody = parseRequestBody(req);
+            const { requestId, action, adminNotes } = requestBody;
+            
+            context.log(`Panel Admin - Action: ${action}, RequestId: ${requestId}`);
+            
+            if (!requestId || !action) {
+                context.res = {
+                    status: 400,
+                    headers: corsHeaders,
+                    body: {
+                        success: false,
+                        error: 'Missing requestId or action'
+                    }
+                };
+                return;
+            }
+            
+            // Update the request status
+            const updateResult = await DatabaseService.updateAccessRequestStatus(requestId, action, adminNotes);
+            
+            if (updateResult.success) {
+                context.res = {
+                    status: 200,
+                    headers: corsHeaders,
+                    body: {
+                        success: true,
+                        message: `Request ${action}d successfully`
+                    }
+                };
+            } else {
+                context.res = {
+                    status: 500,
+                    headers: corsHeaders,
+                    body: {
+                        success: false,
+                        error: updateResult.error || 'Failed to update request'
+                    }
+                };
+            }
         } else {
             context.res = {
                 status: 405,
