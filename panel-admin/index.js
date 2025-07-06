@@ -78,12 +78,27 @@ module.exports = async function (context, req) {
                 'admin-system'
             );
             
+            // CRITICAL: Also update the user status so they can login
+            if (updatedRequest && updatedRequest.userId) {
+                try {
+                    await DatabaseService.updateUserStatus(
+                        updatedRequest.userId, 
+                        action === 'approve' ? 'approved' : 'rejected',
+                        'admin-system'
+                    );
+                    context.log(`Panel Admin - User status updated: ${updatedRequest.userId} -> ${action}d`);
+                } catch (userUpdateError) {
+                    context.log.error('Panel Admin - Failed to update user status:', userUpdateError.message);
+                    // Continue anyway, the request was processed
+                }
+            }
+            
             context.res = {
                 status: 200,
                 headers: corsHeaders,
                 body: {
                     success: true,
-                    message: `Request ${action}d successfully`
+                    message: `Request ${action}d successfully. User can now login.`
                 }
             };
         } else {
