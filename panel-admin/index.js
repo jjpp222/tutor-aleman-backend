@@ -66,28 +66,26 @@ module.exports = async function (context, req) {
                 return;
             }
             
-            // Update the request status
-            const updateResult = await DatabaseService.updateAccessRequestStatus(requestId, action, adminNotes);
+            // Update the request status using existing method
+            const updateData = {
+                status: action === 'approve' ? 'approved' : 'rejected',
+                adminNotes: adminNotes || ''
+            };
             
-            if (updateResult.success) {
-                context.res = {
-                    status: 200,
-                    headers: corsHeaders,
-                    body: {
-                        success: true,
-                        message: `Request ${action}d successfully`
-                    }
-                };
-            } else {
-                context.res = {
-                    status: 500,
-                    headers: corsHeaders,
-                    body: {
-                        success: false,
-                        error: updateResult.error || 'Failed to update request'
-                    }
-                };
-            }
+            const updatedRequest = await DatabaseService.updateAccessRequest(
+                requestId, 
+                updateData, 
+                'admin-system'
+            );
+            
+            context.res = {
+                status: 200,
+                headers: corsHeaders,
+                body: {
+                    success: true,
+                    message: `Request ${action}d successfully`
+                }
+            };
         } else {
             context.res = {
                 status: 405,
