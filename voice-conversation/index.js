@@ -137,20 +137,73 @@ Führe eine fließende, natürliche Konversation wie mit einem guten Freund, der
             .replace(/\s+/g, ' ') // Reemplazar múltiples espacios con uno solo
             .trim();
 
-        // STEP 2: Generate TTS with corrected Speech Services
-        context.log('Step 2: Generating TTS audio...');
+        // STEP 2: Generate intelligent adaptive TTS
+        context.log('Step 2: Generating adaptive TTS audio...');
 
-        const ssml = `
-            <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="de-DE">
-                <voice name="de-DE-KatjaNeural">
-                    <prosody rate="1.15" pitch="+2%">
-                        <break time="200ms"/>
-                        ${cleanResponse}
-                        <break time="300ms"/>
-                    </prosody>
-                </voice>
-            </speak>
-        `;
+        // Generate intelligent SSML based on response content
+        const ssml = generateIntelligentSSML(cleanResponse);
+
+        // Function to create adaptive SSML
+        function generateIntelligentSSML(response) {
+            // Analyze response content for intelligent adaptation
+            const hasCorrection = /kleiner tipp|nur heißt es|man sagt|übrigens/i.test(response);
+            const hasQuestion = /\?/.test(response);
+            const hasCulturalRef = /in deutschland|deutsche|kultur/i.test(response);
+            const hasEmpathy = /verstehe ich|nicht einfach|kenne ich/i.test(response);
+            const isShort = response.length < 50;
+            const isLong = response.length > 100;
+            
+            // Determine speech rate based on content type
+            let rate = "1.15"; // Default rate
+            if (hasCorrection) rate = "1.0";      // Slower for corrections
+            else if (hasCulturalRef) rate = "1.05"; // Slightly slower for cultural info
+            else if (isShort) rate = "1.2";        // Faster for short responses
+            else if (isLong) rate = "1.1";         // Slightly slower for longer responses
+            
+            // Determine pitch variation
+            let pitch = "+2%";
+            if (hasEmpathy) pitch = "+1%";         // Warmer tone for empathy
+            else if (hasQuestion) pitch = "+3%";   // Higher for questions
+            
+            // Process response with intelligent pauses and emphasis
+            let processedResponse = response;
+            
+            // Add strategic pauses
+            processedResponse = processedResponse
+                // Pause before corrections
+                .replace(/(kleiner tipp|nur heißt es|man sagt)/gi, '<break time="400ms"/>$1')
+                // Pause after corrections before continuing
+                .replace(/(kleiner tipp[^.!?]*[.!?])/gi, '$1<break time="500ms"/>')
+                // Pause before cultural explanations
+                .replace(/(in deutschland)/gi, '<break time="300ms"/>$1')
+                // Pause after questions for thinking time
+                .replace(/\?/g, '?<break time="600ms"/>')
+                // Pause at sentence boundaries for natural flow
+                .replace(/\. /g, '.<break time="350ms"/> ')
+                // Pause after empathetic phrases
+                .replace(/(das verstehe ich|das ist nicht einfach)/gi, '$1<break time="400ms"/>');
+            
+            // Add emphasis for important words
+            processedResponse = processedResponse
+                // Emphasize corrections
+                .replace(/(kleiner tipp|nur heißt es|man sagt)/gi, '<emphasis level="moderate">$1</emphasis>')
+                // Emphasize cultural references
+                .replace(/(in deutschland|deutsche)/gi, '<emphasis level="moderate">$1</emphasis>')
+                // Emphasize positive feedback
+                .replace(/(gut|perfekt|genau|richtig)/gi, '<emphasis level="moderate">$1</emphasis>');
+            
+            return `
+                <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="de-DE">
+                    <voice name="de-DE-KatjaNeural">
+                        <prosody rate="${rate}" pitch="${pitch}">
+                            <break time="200ms"/>
+                            ${processedResponse}
+                            <break time="400ms"/>
+                        </prosody>
+                    </voice>
+                </speak>
+            `;
+        }
 
         const ttsResponse = await fetch(`https://${speechRegion}.tts.speech.microsoft.com/cognitiveservices/v1`, {
             method: 'POST',
