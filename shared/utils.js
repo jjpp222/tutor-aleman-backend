@@ -92,12 +92,12 @@ const logWithContext = (context, level, message, data = null) => {
 };
 
 const parseRequestBody = (req) => {
-    // Try req.body first (should work in most cases)
+    // Azure Functions v4 fix: try direct access first
     if (req.body && typeof req.body === 'object') {
         return req.body;
     }
     
-    // If req.body is a string, try to parse it
+    // For Azure Functions v4, body is often a string that needs parsing
     if (req.body && typeof req.body === 'string') {
         try {
             return JSON.parse(req.body);
@@ -106,34 +106,12 @@ const parseRequestBody = (req) => {
         }
     }
     
-    // Try req.rawBody as fallback
-    if (req.rawBody) {
-        try {
-            const rawBodyString = req.rawBody.toString();
-            return JSON.parse(rawBodyString);
-        } catch (parseError) {
-            console.log('Error parsing raw body:', parseError.message);
-        }
-    }
-    
-    // Try req.headers['content-type'] specific parsing
-    if (req.headers && req.headers['content-type'] && req.headers['content-type'].includes('application/json')) {
-        // For Azure Functions v4, sometimes the body is available in different properties
-        const possibleBodies = [req.body, req.rawBody, req.bufferBody];
-        for (const body of possibleBodies) {
-            if (body) {
-                try {
-                    const bodyString = typeof body === 'string' ? body : body.toString();
-                    return JSON.parse(bodyString);
-                } catch (parseError) {
-                    continue; // Try next body
-                }
-            }
-        }
-    }
-    
-    console.log('Unable to parse request body, available properties:', Object.keys(req));
-    return null;
+    // Simple fix: return empty object if nothing works
+    console.log('parseRequestBody: Unable to parse, returning empty object');
+    console.log('Available req properties:', Object.keys(req));
+    console.log('req.body type:', typeof req.body);
+    console.log('req.body value:', req.body);
+    return {};
 };
 
 module.exports = {
