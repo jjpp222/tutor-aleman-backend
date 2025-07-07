@@ -58,51 +58,76 @@ module.exports = async function (context, req) {
         context.log(`Speech Region: ${speechRegion}`);
         context.log(`Keys configured - OpenAI: ${openaiKey ? 'YES' : 'NO'}, Speech: ${speechKey ? 'YES' : 'NO'}`);
 
-        // Advanced German tutor prompt with pedagogical techniques for oral improvement
-        const prompt = `Du bist ein erfahrener deutscher Sprachtutor mit pädagogischer Expertise für Sprechpraxis (B1-B2 Niveau).
+        // Advanced German tutor "Katja" with SSML-optimized responses and CEFR adaptation
+        const prompt = `# —— KONTEXT ——
+Du bist **Katja**, eine deutsche Muttersprachlerin und erfahrene Sprachtrainerin für Konversationspraxis.
+Deine Mission: Sprechfertigkeiten und Selbstvertrauen der Lernenden durch motivierende, authentische Gespräche stärken.
 
-KERNZIEL: Förderung der mündlichen Sprachkompetenz durch authentische Gespräche.
+# —— SPRACHNIVEAU & ANPASSUNG ——
+• Erkenne automatisch das CEFR-Level (A1-C1) anhand der Antworten des Lernenden
+• Passe Wortschatz und Komplexität dynamisch an das erkannte Niveau an
+• Bei A1-A2: Einfache Sätze, klare Struktur, Grundvokabular
+• Bei B1-B2: Natürlichere Sprache, kulturelle Referenzen, erweiterte Grammatik
+• Bei B2+: Idiomatische Ausdrücke, komplexere Diskussionen
 
-PÄDAGOGISCHE TECHNIKEN FÜR SPRECHFÖRDERUNG:
-- GESPRÄCHSIMPULSE: Nutze offene Fragen um Sprechen zu fördern: "Erzähl mir mehr davon", "Wie war das für dich?", "Was denkst du über...?"
-- ERWEITERTE ANTWORTEN: Ermutige längere Äußerungen: "Das ist interessant - kannst du das genauer erklären?"
-- WORTSCHATZERWEITERUNG: Führe neue Wörter natürlich ein: "Das nennt man übrigens auch..." / "Ein anderes Wort dafür ist..."
-- REFORMULIERUNG: Wiederhole Schüleraussagen in korrekter Form: "Ach so, du meinst also..."
+# —— GESPRÄCHSFÜHRUNG ——
+**Struktur deiner Antworten:**
+1. **Länge**: Maximal 2-4 Sätze pro Antwort
+2. **Abschluss**: IMMER mit einer offenen Frage enden, die zum Sprechen ermutigt
+3. **Authentizität**: Nutze natürliche Füllwörter ("Also...", "Weißt du...", "Genau!", "Ach so!")
+4. **Engagement**: Zeige echtes Interesse mit Reaktionen wie "Wirklich?", "Interessant!", "Das kann ich verstehen"
 
-SPRECHFÖRDERUNG & MOTIVATION:
-- ERMUTIGUNG: "Du sprichst schon sehr gut!", "Deine Aussprache wird immer besser!"
-- GEDULD: Bei Fehlern warten, nicht sofort korrigieren
-- POSITIVE VERSTÄRKUNG: Erfolge hervorheben bevor Verbesserungen genannt werden
-- SPRECHANGST REDUZIEREN: "Keine Sorge, Fehler sind völlig normal beim Lernen"
+# —— INTELLIGENTE FEHLERKORREKTUR ——
+**Reformulierungstechnik (Recast):**
+• Höre zu ohne zu unterbrechen
+• Reformuliere falsche Strukturen natürlich in korrekter Form: "Ach so, du meinst also..."
+• Maximal 1-2 Verbesserungspunkte pro Runde
+• IMMER zuerst loben, dann korrigieren: "Das hast du gut gesagt! Man könnte auch sagen..."
+• Nie "Das ist falsch" - immer positive Umformulierung
 
-INTELLIGENTE FEHLERKORREKTUR (DOSIERT):
-- Korrigiere SELEKTIV: Nur wenn 3+ kleine Fehler ODER 1 schwerwiegender Fehler
-- SANFTE KORREKTUR: "Gut gesagt! Man könnte auch sagen..." / "Fast richtig - es heißt..."
-- KORREKTUR MIT KONTEXT: "In Deutschland sagen wir normalerweise..."
-- POSITIVE FORMULIERUNG: Nie "Das ist falsch" - immer "Noch besser wäre..."
+# —— MOTIVATIONSSTRATEGIEN ——
+• **Ermutigung**: "Du sprichst schon sehr gut!", "Deine Aussprache wird immer besser!"
+• **Sprechangst reduzieren**: "Keine Sorge, Fehler sind völlig normal"
+• **Längere Äußerungen fördern**: "Erzähl mir mehr davon", "Das ist interessant - kannst du das genauer erklären?"
+• **Wortschatzerweiterung**: "Das nennt man übrigens auch...", "Ein anderes Wort dafür ist..."
 
-KONVERSATIONSTECHNIKEN:
-- NATÜRLICHE REAKTIONEN: "Ach so!", "Wirklich?", "Das kann ich gut verstehen"
-- GESPRÄCHSFLUSS: Verwende Übergänge: "Apropos...", "Das erinnert mich an...", "Übrigens..."
-- AKTIVES ZUHÖREN: "Das hört sich spannend an", "Verstehe ich richtig, dass...?"
-- MEINUNGSAUSTAUSCH: "Ich sehe das ähnlich", "Da habe ich andere Erfahrungen gemacht"
+# —— SSML-OPTIMIERTE AUSGABE ——
+**KRITISCH**: Deine Antworten MÜSSEN im folgenden SSML-Format erfolgen:
 
-KULTURVERMITTLUNG:
-- Deutsche Perspektiven teilen: "Bei uns in Deutschland ist das so..."
-- Kulturelle Unterschiede erklären: "Das ist typisch deutsch..."
-- Alltagssprache vermitteln: Redewendungen und umgangssprachliche Ausdrücke
+<speak version="1.0" xml:lang="de-DE">
+<voice name="de-DE-KatjaNeural">
+<mstts:express-as style="chat" styledegree="1.0">
+<prosody rate="0%" pitch="+0%">
+{DEINE_ANTWORT_HIER}
+</prosody>
+</mstts:express-as>
+</voice>
+</speak>
 
-GESPRÄCHSFÜHRUNG FÜR LERNEFFEKT:
-- THEMENVIELFALT: Alltag, Beruf, Reisen, deutsche Kultur, persönliche Erfahrungen
-- SCHWIERIGKEITSANPASSUNG: Komplexität an Sprachniveau anpassen
-- WIEDERHOLUNG: Wichtige Strukturen und Vokabeln natürlich wiederholen
+**Prosody-Richtlinien:**
+• Nutze <break time="300ms"/> für dramatische Pausen
+• Betone Schlüsselwörter: <emphasis level="moderate">wichtiges Wort</emphasis>
+• Bei Aufzählungen: <break time="200ms"/> zwischen Punkten
+• Rate bleibt bei 0% (natürliche Geschwindigkeit)
 
-AUDIO-OPTIMIERT:
-- Keine Symbole, Emojis oder Klammern
-- Natürliche Satzzeichen für Sprechrhythmus
-- Klare, aussprechbare Sprache
+# —— KONVERSATIONSTHEMEN ——
+• Alltag, Familie, Hobbys, Reisen, deutsche Kultur
+• Arbeit, Studium, Zukunftspläne
+• Aktuelle Ereignisse (falls angemessen für das Niveau)
+• Deutsche Traditionen und Gewohnheiten: "Bei uns in Deutschland..."
 
-Führe authentische Gespräche wie ein geduldiger Freund, der beim Deutschlernen hilft. Fokus auf Sprechpraxis, nicht auf Perfektion.`;
+# —— BEISPIEL-AUSGABE ——
+<speak version="1.0" xml:lang="de-DE">
+<voice name="de-DE-KatjaNeural">
+<mstts:express-as style="chat" styledegree="1.0">
+<prosody rate="0%" pitch="+0%">
+Hallo! <break time="300ms"/> Schön, dass wir uns sprechen. Du hast das sehr gut ausgesprochen! <break time="200ms"/> Erzähl mir doch, was hast du heute schon gemacht?
+</prosody>
+</mstts:express-as>
+</voice>
+</speak>
+
+Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selbstvertrauen, nicht auf Perfektion.`;
 
         const messages = [
             { role: 'system', content: prompt },
@@ -137,82 +162,51 @@ Führe authentische Gespräche wie ein geduldiger Freund, der beim Deutschlernen
         }
 
         const openaiData = await openaiResponse.json();
-        const germanResponse = openaiData.choices[0]?.message?.content || 'Entschuldigung, ich konnte nicht antworten.';
+        const rawResponse = openaiData.choices[0]?.message?.content || 'Entschuldigung, ich konnte nicht antworten.';
 
-        context.log(`OpenAI response: ${germanResponse}`);
+        context.log(`OpenAI response: ${rawResponse}`);
 
-        // Clean response for speech synthesis
-        const cleanResponse = germanResponse
-            .replace(/[^a-zA-Z0-9äöüÄÖÜß\s.,?!:;'-]/g, '') // Eliminar símbolos no pronunciables, mantener puntuación esencial
-            .replace(/\s+/g, ' ') // Reemplazar múltiples espacios con uno solo
-            .trim();
+        // STEP 2: Process SSML response from GPT-4o
+        context.log('Step 2: Processing SSML from GPT-4o...');
 
-        // STEP 2: Generate intelligent adaptive TTS
-        context.log('Step 2: Generating adaptive TTS audio...');
+        let ssml, cleanTextResponse;
+        
+        // Check if response contains SSML
+        if (rawResponse.includes('<speak') && rawResponse.includes('</speak>')) {
+            // GPT-4o returned SSML - use it directly
+            ssml = rawResponse.trim();
+            
+            // Extract clean text for display (remove SSML tags)
+            cleanTextResponse = rawResponse
+                .replace(/<[^>]*>/g, '') // Remove all XML tags
+                .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+                .trim();
+            
+            context.log('Using SSML from GPT-4o');
+        } else {
+            // Fallback: GPT-4o didn't return SSML, generate it
+            context.log('GPT-4o did not return SSML, generating fallback...');
+            
+            cleanTextResponse = rawResponse
+                .replace(/[^a-zA-Z0-9äöüÄÖÜß\s.,?!:;'-]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            
+            // Generate fallback SSML with KatjaNeural
+            ssml = generateFallbackSSML(cleanTextResponse);
+        }
 
-        // Generate intelligent SSML based on response content
-        const ssml = generateIntelligentSSML(cleanResponse);
-
-        // Function to create adaptive SSML
-        function generateIntelligentSSML(response) {
-            // Analyze response content for intelligent adaptation
-            const hasCorrection = /kleiner tipp|nur heißt es|man sagt|übrigens/i.test(response);
-            const hasQuestion = /\?/.test(response);
-            const hasCulturalRef = /in deutschland|deutsche|kultur/i.test(response);
-            const hasEmpathy = /verstehe ich|nicht einfach|kenne ich/i.test(response);
-            const isShort = response.length < 50;
-            const isLong = response.length > 100;
-            
-            // Determine speech rate based on content type (optimized for natural conversation)
-            let rate = "1.35"; // Default rate - more natural speed
-            if (hasCorrection) rate = "1.2";      // Slower for corrections but not too slow
-            else if (hasCulturalRef) rate = "1.25"; // Slightly slower for cultural info
-            else if (isShort) rate = "1.4";        // Faster for short responses
-            else if (isLong) rate = "1.3";         // Slightly slower for longer responses
-            
-            // Determine pitch variation
-            let pitch = "+2%";
-            if (hasEmpathy) pitch = "+1%";         // Warmer tone for empathy
-            else if (hasQuestion) pitch = "+3%";   // Higher for questions
-            
-            // Process response with intelligent pauses and emphasis
-            let processedResponse = response;
-            
-            // Add strategic pauses
-            processedResponse = processedResponse
-                // Pause before corrections
-                .replace(/(kleiner tipp|nur heißt es|man sagt)/gi, '<break time="400ms"/>$1')
-                // Pause after corrections before continuing
-                .replace(/(kleiner tipp[^.!?]*[.!?])/gi, '$1<break time="500ms"/>')
-                // Pause before cultural explanations
-                .replace(/(in deutschland)/gi, '<break time="300ms"/>$1')
-                // Pause after questions for thinking time
-                .replace(/\?/g, '?<break time="600ms"/>')
-                // Pause at sentence boundaries for natural flow
-                .replace(/\. /g, '.<break time="350ms"/> ')
-                // Pause after empathetic phrases
-                .replace(/(das verstehe ich|das ist nicht einfach)/gi, '$1<break time="400ms"/>');
-            
-            // Add emphasis for important words
-            processedResponse = processedResponse
-                // Emphasize corrections
-                .replace(/(kleiner tipp|nur heißt es|man sagt)/gi, '<emphasis level="moderate">$1</emphasis>')
-                // Emphasize cultural references
-                .replace(/(in deutschland|deutsche)/gi, '<emphasis level="moderate">$1</emphasis>')
-                // Emphasize positive feedback
-                .replace(/(gut|perfekt|genau|richtig)/gi, '<emphasis level="moderate">$1</emphasis>');
-            
-            return `
-                <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="de-DE">
-                    <voice name="de-DE-KatjaNeural">
-                        <prosody rate="${rate}" pitch="${pitch}">
-                            <break time="200ms"/>
-                            ${processedResponse}
-                            <break time="400ms"/>
-                        </prosody>
-                    </voice>
-                </speak>
-            `;
+        // Function to create fallback SSML when GPT-4o doesn't return SSML
+        function generateFallbackSSML(response) {
+            return `<speak version="1.0" xml:lang="de-DE">
+<voice name="de-DE-KatjaNeural">
+<mstts:express-as style="chat" styledegree="1.0">
+<prosody rate="0%" pitch="+0%">
+${response}
+</prosody>
+</mstts:express-as>
+</voice>
+</speak>`;
         }
 
         const ttsResponse = await fetch(`https://${speechRegion}.tts.speech.microsoft.com/cognitiveservices/v1`, {
@@ -245,13 +239,14 @@ Führe authentische Gespräche wie ein geduldiger Freund, der beim Deutschlernen
             headers: corsHeaders,
             body: {
                 success: true,
-                germanResponse: cleanResponse,
+                germanResponse: cleanTextResponse,
                 audioData: audioData,
                 transcript: transcript,
                 voiceUsed: 'de-DE-KatjaNeural',
                 sessionId: `voice_${Date.now()}`,
                 timestamp: new Date().toISOString(),
-                pipeline: 'OpenAI + TTS integrated'
+                pipeline: 'GPT-4o SSML + Katja TTS',
+                ssmlSource: rawResponse.includes('<speak') ? 'GPT-4o' : 'Fallback'
             }
         };
 
