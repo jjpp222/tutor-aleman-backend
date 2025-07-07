@@ -21,7 +21,7 @@ module.exports = async function (context, req) {
     }
 
     try {
-        const { transcript } = req.body || {};
+        const { transcript, messages: conversationHistory } = req.body || {};
         
         if (!transcript) {
             context.res = {
@@ -36,6 +36,7 @@ module.exports = async function (context, req) {
         }
 
         context.log(`Processing transcript: ${transcript}`);
+        context.log(`Conversation history length: ${conversationHistory ? conversationHistory.length : 0}`);
 
         // OpenAI Configuration
         const openaiEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
@@ -166,46 +167,31 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
 
         context.log(`OpenAI response: ${rawResponse}`);
 
-        // STEP 2: Process SSML response from GPT-4o
-        context.log('Step 2: Processing SSML from GPT-4o...');
+        // STEP 2: Generate SSML (temporarily disable GPT-4o SSML due to compatibility issues)
+        context.log('Step 2: Generating SSML in backend...');
 
-        let ssml, cleanTextResponse;
+        // Always extract clean text and generate SSML in backend for now
+        const cleanTextResponse = rawResponse
+            .replace(/<[^>]*>/g, '') // Remove any XML tags GPT-4o might have added
+            .replace(/[^a-zA-Z0-9äöüÄÖÜß\s.,?!:;'-]/g, '') // Remove non-speech characters
+            .replace(/\s+/g, ' ') // Replace multiple spaces
+            .trim();
         
-        // Check if response contains SSML
-        if (rawResponse.includes('<speak') && rawResponse.includes('</speak>')) {
-            // GPT-4o returned SSML - use it directly
-            ssml = rawResponse.trim();
-            
-            // Extract clean text for display (remove SSML tags)
-            cleanTextResponse = rawResponse
-                .replace(/<[^>]*>/g, '') // Remove all XML tags
-                .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-                .trim();
-            
-            context.log('Using SSML from GPT-4o');
-        } else {
-            // Fallback: GPT-4o didn't return SSML, generate it
-            context.log('GPT-4o did not return SSML, generating fallback...');
-            
-            cleanTextResponse = rawResponse
-                .replace(/[^a-zA-Z0-9äöüÄÖÜß\s.,?!:;'-]/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-            
-            // Generate fallback SSML with KatjaNeural
-            ssml = generateFallbackSSML(cleanTextResponse);
-        }
+        context.log(`Clean response for TTS: ${cleanTextResponse}`);
+        
+        // Generate reliable SSML with KatjaNeural
+        const ssml = generateReliableSSML(cleanTextResponse);
 
-        // Function to create fallback SSML when GPT-4o doesn't return SSML
-        function generateFallbackSSML(response) {
-            return `<speak version="1.0" xml:lang="de-DE">
-<voice name="de-DE-KatjaNeural">
-<mstts:express-as style="chat" styledegree="1.0">
-<prosody rate="0%" pitch="+0%">
-${response}
-</prosody>
-</mstts:express-as>
-</voice>
+        // Function to create reliable SSML for KatjaNeural
+        function generateReliableSSML(response) {
+            return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="de-DE">
+    <voice name="de-DE-KatjaNeural">
+        <mstts:express-as style="chat" styledegree="1.0">
+            <prosody rate="0%" pitch="+0%">
+                ${response}
+            </prosody>
+        </mstts:express-as>
+    </voice>
 </speak>`;
         }
 
@@ -245,8 +231,8 @@ ${response}
                 voiceUsed: 'de-DE-KatjaNeural',
                 sessionId: `voice_${Date.now()}`,
                 timestamp: new Date().toISOString(),
-                pipeline: 'GPT-4o SSML + Katja TTS',
-                ssmlSource: rawResponse.includes('<speak') ? 'GPT-4o' : 'Fallback'
+                pipeline: 'GPT-4o + Backend SSML + Katja TTS',
+                ssmlSource: 'Backend Generated'
             }
         };
 
