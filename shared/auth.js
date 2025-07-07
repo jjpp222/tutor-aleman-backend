@@ -121,6 +121,13 @@ class AuthService {
             role: config.roles.STUDENT,
             status: config.statuses.PENDING,
             germanLevel,
+            cefrLevel: germanLevel, // Initialize CEFR level with self-reported level
+            levelHistory: [{
+                level: germanLevel,
+                date: new Date().toISOString(),
+                source: 'initial-registration',
+                previousLevel: null
+            }],
             motivation,
             institution: institution || null
         });

@@ -1,4 +1,6 @@
 const fetch = require('node-fetch');
+const { DatabaseService } = require('../shared/database');
+const { validateJWT } = require('../shared/auth');
 
 module.exports = async function (context, req) {
     context.log('Voice conversation with corrected Speech Services key');
@@ -21,7 +23,7 @@ module.exports = async function (context, req) {
     }
 
     try {
-        const { transcript, messages: conversationHistory } = req.body || {};
+        const { transcript, messages: conversationHistory, sessionId } = req.body || {};
         
         if (!transcript) {
             context.res = {
@@ -35,8 +37,33 @@ module.exports = async function (context, req) {
             return;
         }
 
+        // Validate JWT token and get user info
+        let userId = null;
+        let userCEFRLevel = 'B1'; // Default fallback
+        
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            try {
+                const token = authHeader.substring(7);
+                const decoded = validateJWT(token);
+                
+                if (decoded && decoded.userId) {
+                    userId = decoded.userId;
+                    userCEFRLevel = await DatabaseService.getUserCEFRLevel(userId);
+                    context.log(`User authenticated: ${userId}, CEFR Level: ${userCEFRLevel}`);
+                } else {
+                    context.log('Invalid token, using default level B1');
+                }
+            } catch (authError) {
+                context.log('Auth validation failed, using default level B1:', authError.message);
+            }
+        } else {
+            context.log('No authorization header, using default level B1');
+        }
+
         context.log(`Processing transcript: ${transcript}`);
         context.log(`Conversation history length: ${conversationHistory ? conversationHistory.length : 0}`);
+        context.log(`User CEFR Level: ${userCEFRLevel}`);
 
         // === UTILITY FUNCTIONS ===
         // Estimate tokens for dynamic max_tokens calculation
@@ -159,8 +186,16 @@ Hallo! Schön, dass wir uns sprechen. Du hast das sehr *gut* ausgesprochen! Erz�
 
 Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selbstvertrauen, nicht auf Perfektion.`;
 
+        // Create user profile message for consistent CEFR level awareness
+        const profileMessage = {
+            role: 'system',
+            name: 'user-profile',
+            content: `CEFR=${userCEFRLevel}`
+        };
+
         const messages = [
             { role: 'system', content: prompt },
+            profileMessage, // ← NUEVO: Always inject user's CEFR level
             ...(conversationHistory || []),
             { role: 'user', content: transcript.trim() }
         ];
@@ -356,8 +391,8 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             }
         }
 
-        // Generate natural SSML with CEFR-aware adaptations
-        const ssml = generateNaturalSSML(cleanTextResponse, detectedLevel);
+        // Generate natural SSML with user's confirmed CEFR level  
+        const ssml = generateNaturalSSML(cleanTextResponse, userCEFRLevel);
 
         // Main SSML generator (refactored with modules)
         function generateNaturalSSML(text, cefrLevel = 'B1') {
@@ -454,7 +489,8 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 timestamp: new Date().toISOString(),
                 pipeline: 'GPT-4o + CEFR-Adaptive SSML + Katja TTS v2.0',
                 ssmlSource: 'Modular CEFR-Aware Engine',
-                detectedLevel: detectedLevel,
+                detectedLevel: detectedLevel, // AI-detected from response
+                appliedLevel: userCEFRLevel,  // Actually used for TTS generation
                 tokenCalculation: {
                     inputTokens: estimateTokens(transcript),
                     allocatedTokens: dynamicMaxTokens,
@@ -463,7 +499,8 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 },
                 prosodyInfo: {
                     ...analyzeText(cleanTextResponse),
-                    cefrLevel: detectedLevel,
+                    detectedLevel: detectedLevel,
+                    appliedLevel: userCEFRLevel,
                     style: 'chat',
                     styledegree: '0.8',
                     adaptivePauses: true,
