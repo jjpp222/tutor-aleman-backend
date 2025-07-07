@@ -110,11 +110,11 @@ Deine Mission: Sprechfertigkeiten und Selbstvertrauen der Lernenden durch motivi
 # —— SPRACHNIVEAU & EXPLIZITE ERKENNUNG ——
 **WICHTIG**: Beginne jede Antwort mit einem unsichtbaren Level-Tag:
 • Analysiere die letzte Äußerung des Lernenden
-• Setze als ERSTES ZEICHEN: <<A1>>, <<A2>>, <<B1>>, <<B2>>, oder <<C1>>
+• Setze als ERSTES ZEICHEN: <<A1>>, <<A2>>, <<B1>>, <<B2>>, <<C1>>, oder <<C2>>
 • Passe dann Wortschatz und Komplexität an:
   - A1-A2: Einfache Sätze, klare Struktur, Grundvokabular
   - B1-B2: Natürlichere Sprache, kulturelle Referenzen, erweiterte Grammatik
-  - B2+: Idiomatische Ausdrücke, komplexere Diskussionen
+  - C1-C2: Idiomatische Ausdrücke, komplexere Diskussionen, native-like fluency
 
 # —— GESPRÄCHSFÜHRUNG ——
 **Struktur deiner Antworten:**
@@ -203,13 +203,13 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
         // STEP 2: Parse CEFR level and clean response
         context.log('Step 2: Parsing CEFR level and generating SSML...');
 
-        // Extract CEFR level tag if present
-        const cefrMatch = rawResponse.match(/^<<(A1|A2|B1|B2|C1)>>/);
+        // Extract CEFR level tag if present (now includes C2)
+        const cefrMatch = rawResponse.match(/^<<(A1|A2|B1|B2|C1|C2)>>/);
         const detectedLevel = cefrMatch ? cefrMatch[1] : 'B1'; // Default to B1
         
         // Remove CEFR tag and clean text for TTS
         let cleanTextResponse = rawResponse
-            .replace(/^<<(A1|A2|B1|B2|C1)>>/, '') // Remove CEFR tag
+            .replace(/^<<(A1|A2|B1|B2|C1|C2)>>/, '') // Remove CEFR tag
             .replace(/<[^>]*>/g, '') // Remove any other XML tags
             .replace(/[^a-zA-Z0-9äöüÄÖÜß\s.,?!:;'*-]/g, '') // Keep asterisks for emphasis
             .replace(/\s+/g, ' ') // Replace multiple spaces
@@ -241,19 +241,36 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             };
         }
         
-        // Prosody engine for rate and pitch calculation
-        function calculateProsody(textAnalysis, cefrLevel) {
-            let baseRate = "+0%";
-            // Adapt base speed to CEFR level
-            if (cefrLevel === 'A1' || cefrLevel === 'A2') baseRate = "-8%";
-            else if (cefrLevel === 'C1') baseRate = "+3%";
+        // Prosody engine for rate and pitch calculation with C2 support
+        function calculateProsody(textAnalysis, cefrLevel, turnCount = 0) {
+            // CEFR-based rates (WPM optimized)
+            const baseRates = {
+                'A1': -3,   // ~117 wpm
+                'A2': -3,   // ~117 wpm  
+                'B1': 10,   // ~133 wpm
+                'B2': 18,   // ~143 wpm
+                'C1': 25,   // ~152 wpm
+                'C2': 32    // ~162 wpm (NEW!)
+            };
             
-            let rate = baseRate;
-            if (textAnalysis.isCorrection) rate = "-10%";
-            else if (textAnalysis.isQuestion) rate = "+5%";
-            else if (textAnalysis.isShort) rate = "+8%";
-            else rate = vary(baseRate, 2);
+            // 1. Base rate according to CEFR level
+            let rateValue = baseRates[cefrLevel] ?? 10; // Default to B1 if unknown
             
+            // 2. Contextual adjustments
+            if (textAnalysis.isCorrection) rateValue -= 5;      // Slower for corrections
+            else if (textAnalysis.isShort) rateValue += 4;      // Faster for short responses  
+            else if (textAnalysis.isQuestion) rateValue += 2;   // Slightly faster for questions
+            
+            // 3. Natural variation every 3 turns (avoid robot voice)
+            if (turnCount % 3 === 0 && !textAnalysis.isCorrection) {
+                rateValue += (Math.random() * 2 - 1); // ±1% micro-variation
+            }
+            
+            // 4. Safe range limits (expanded for C2)
+            const finalRate = Math.max(-15, Math.min(rateValue, 35));
+            const rate = `${finalRate.toFixed(1)}%`;
+            
+            // 5. Dynamic pitch (unchanged)
             let pitch = vary("+0%", 2);
             if (textAnalysis.isCorrection) pitch = "+3%";
             
@@ -270,7 +287,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             
             const lengthFactor = Math.min(1.8, 1 + sentenceLength / 100);
             const levelFactor = {
-                'A1': 1.5, 'A2': 1.3, 'B1': 1.0, 'B2': 0.9, 'C1': 0.8
+                'A1': 1.5, 'A2': 1.3, 'B1': 1.0, 'B2': 0.9, 'C1': 0.8, 'C2': 0.7
             }[cefrLevel] || 1.0;
             
             return Math.round(baseTime * lengthFactor * levelFactor);
