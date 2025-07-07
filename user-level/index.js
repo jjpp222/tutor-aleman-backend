@@ -55,8 +55,36 @@ module.exports = async function (context, req) {
 
         if (req.method === 'GET') {
             // Get current CEFR level for user
+            let user;
+            try {
+                user = await DatabaseService.getUserById(userId);
+                if (!user) {
+                    context.log.warn(`User with ID ${userId} not found in database.`);
+                    context.res = {
+                        status: 404,
+                        headers: corsHeaders,
+                        body: {
+                            success: false,
+                            error: 'User not found'
+                        }
+                    };
+                    return;
+                }
+            } catch (dbError) {
+                context.log.error(`Error fetching user ${userId} from database:`, dbError);
+                context.res = {
+                    status: 500,
+                    headers: corsHeaders,
+                    body: {
+                        success: false,
+                        error: 'Database error fetching user',
+                        details: dbError.message
+                    }
+                };
+                return;
+            }
+
             const currentLevel = await DatabaseService.getUserCEFRLevel(userId);
-            const user = await DatabaseService.getUserById(userId);
             
             context.res = {
                 status: 200,
