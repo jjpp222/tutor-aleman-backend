@@ -179,11 +179,90 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
         
         context.log(`Clean response for TTS: ${cleanTextResponse}`);
         
-        // Generate reliable SSML with KatjaNeural
-        const ssml = generateReliableSSML(cleanTextResponse);
+        // Generate intelligent SSML with adaptive prosody
+        const ssml = generateIntelligentSSML(cleanTextResponse);
 
-        // Function to create reliable SSML for KatjaNeural (following exact Azure specifications)
-        function generateReliableSSML(response) {
+        // Intelligent SSML generator with fallback safety (Hybrid Approach)
+        function generateIntelligentSSML(text) {
+            try {
+                // 1. Detect content patterns
+                const isCorrection = /man könnte auch sagen|fast richtig|gut gesagt|noch besser wäre/i.test(text);
+                const isQuestion = /\?/.test(text);
+                const isShort = text.length < 50;
+                const hasEmphasis = /genau|perfekt|gut|richtig|interessant/i.test(text);
+
+                // 2. Adaptive rate (prudent range: -10% to +20%)
+                let rate = "+15%"; // Base for B1-B2
+                if (isCorrection) rate = "-5%";       // Slower for corrections
+                else if (isQuestion) rate = "+10%";   // Moderate for questions
+                else if (isShort) rate = "+20%";      // Faster for short responses
+
+                // 3. Smart pauses and emphasis using invisible separator
+                let processed = text
+                    .replace(/\?/g, '?\u2063') // invisible marker to avoid XML conflicts
+                    .replace(/\. /g, '.\u2063')
+                    .replace(/\, /g, ',\u2063');
+
+                // Process segments for pauses
+                processed = processed
+                    .split('\u2063')
+                    .map(segment => segment.trim())
+                    .filter(Boolean)
+                    .map(segment => {
+                        if (segment.endsWith('?')) {
+                            return `${segment}<break time="600ms"/>`;
+                        } else if (segment.endsWith('.')) {
+                            return `${segment}<break time="300ms"/>`;
+                        } else if (segment.endsWith(',')) {
+                            return `${segment}<break time="200ms"/>`;
+                        }
+                        return segment;
+                    })
+                    .join(' ');
+
+                // 4. Selective emphasis (max 1-2 terms per turn)
+                if (hasEmphasis && !isCorrection) {
+                    processed = processed.replace(/(genau|perfekt|gut|interessant)/i, '<emphasis level="moderate">$1</emphasis>');
+                }
+
+                // 5. Special handling for corrections
+                let pitch = "+0%";
+                if (isCorrection) {
+                    pitch = "+3%"; // Slightly higher pitch for corrections
+                }
+
+                // 6. Generate hermetic SSML template
+                const ssml = `<speak version="1.0"
+       xml:lang="de-DE"
+       xmlns="http://www.w3.org/2001/10/synthesis"
+       xmlns:mstts="https://www.w3.org/2001/mstts">
+
+  <voice name="de-DE-KatjaNeural">
+    <mstts:express-as style="assistant" styledegree="1.0">
+      <prosody rate="${rate}" pitch="${pitch}">
+        ${processed}
+      </prosody>
+    </mstts:express-as>
+  </voice>
+
+</speak>`;
+
+                // 7. Basic SSML validation
+                if (!ssml.includes('<speak') || !ssml.includes('</speak>')) {
+                    throw new Error('Invalid SSML structure');
+                }
+
+                context.log(`Generated intelligent SSML with rate: ${rate}, pitch: ${pitch}`);
+                return ssml;
+
+            } catch (error) {
+                context.log(`SSML generation failed: ${error.message}, using safe fallback`);
+                return generateSafeSSML(text);
+            }
+        }
+
+        // Safe fallback SSML (fixed template)
+        function generateSafeSSML(response) {
             return `<speak version="1.0"
        xml:lang="de-DE"
        xmlns="http://www.w3.org/2001/10/synthesis"
@@ -191,7 +270,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
 
   <voice name="de-DE-KatjaNeural">
     <mstts:express-as style="assistant" styledegree="1.0">
-      <prosody rate="0%" pitch="+0%">
+      <prosody rate="+15%" pitch="+0%">
         ${response}
       </prosody>
     </mstts:express-as>
@@ -236,8 +315,13 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 voiceUsed: 'de-DE-KatjaNeural',
                 sessionId: `voice_${Date.now()}`,
                 timestamp: new Date().toISOString(),
-                pipeline: 'GPT-4o + Backend SSML + Katja TTS',
-                ssmlSource: 'Backend Generated'
+                pipeline: 'GPT-4o + Intelligent SSML + Katja TTS',
+                ssmlSource: 'Intelligent Hybrid',
+                prosodyInfo: {
+                    hasCorrection: /man könnte auch sagen|fast richtig/i.test(cleanTextResponse),
+                    hasQuestion: /\?/.test(cleanTextResponse),
+                    isShort: cleanTextResponse.length < 50
+                }
             }
         };
 
