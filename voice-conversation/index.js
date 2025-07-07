@@ -132,6 +132,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
 
         const messages = [
             { role: 'system', content: prompt },
+            ...(conversationHistory || []),
             { role: 'user', content: transcript.trim() }
         ];
 
