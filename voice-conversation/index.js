@@ -182,16 +182,21 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
         // Generate reliable SSML with KatjaNeural
         const ssml = generateReliableSSML(cleanTextResponse);
 
-        // Function to create reliable SSML for KatjaNeural
+        // Function to create reliable SSML for KatjaNeural (following exact Azure specifications)
         function generateReliableSSML(response) {
-            return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="de-DE">
-    <voice name="de-DE-KatjaNeural">
-        <mstts:express-as style="chat" styledegree="1.0">
-            <prosody rate="0%" pitch="+0%">
-                ${response}
-            </prosody>
-        </mstts:express-as>
-    </voice>
+            return `<speak version="1.0"
+       xml:lang="de-DE"
+       xmlns="http://www.w3.org/2001/10/synthesis"
+       xmlns:mstts="https://www.w3.org/2001/mstts">
+
+  <voice name="de-DE-KatjaNeural">
+    <mstts:express-as style="assistant" styledegree="1.0">
+      <prosody rate="0%" pitch="+0%">
+        ${response}
+      </prosody>
+    </mstts:express-as>
+  </voice>
+
 </speak>`;
         }
 
