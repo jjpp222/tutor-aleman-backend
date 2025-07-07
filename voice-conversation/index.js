@@ -147,7 +147,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             },
             body: JSON.stringify({
                 messages: messages,
-                max_tokens: 150,
+                max_tokens: 120, // Reducido para bajar latencia
                 temperature: 0.7,
                 top_p: 0.9,
                 frequency_penalty: 0.2,
