@@ -6,7 +6,7 @@
       "direction": "in",
       "name": "req",
       "methods": ["post"],
-      "route": "migrate-cefr-levels"
+      "route": "migrate-cefr"
     },
     {
       "type": "http",
