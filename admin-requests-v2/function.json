@@ -6,7 +6,7 @@
       "direction": "in",
       "name": "req",
       "methods": ["get", "post", "options"],
-      "route": "admin-requests-v2"
+      "route": "admin/requests-v2"
     },
     {
       "type": "http",

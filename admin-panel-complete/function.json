@@ -6,7 +6,7 @@
       "direction": "in",
       "name": "req",
       "methods": ["get", "post", "options"],
-      "route": "admin-panel-complete"
+      "route": "admin/panel-complete"
     },
     {
       "type": "http",
