@@ -94,7 +94,7 @@ module.exports = async function (context, req) {
                     cefrLevel: currentLevel,
                     germanLevel: user?.germanLevel || null,
                     levelHistory: user?.levelHistory || [],
-                    hasLevel: !!user?.cefrLevel
+                    hasLevel: !!(user?.cefrLevel || user?.germanLevel)
                 }
             };
             return;
