@@ -38,6 +38,49 @@ module.exports = async function (context, req) {
         context.log(`Processing transcript: ${transcript}`);
         context.log(`Conversation history length: ${conversationHistory ? conversationHistory.length : 0}`);
 
+        // === UTILITY FUNCTIONS ===
+        // Estimate tokens for dynamic max_tokens calculation
+        function estimateTokens(text) {
+            // Rough approximation: ~0.75 tokens per word for German
+            const words = text.trim().split(/\s+/).length;
+            return Math.ceil(words * 0.75);
+        }
+
+        // Safe token budget calculation
+        function calculateTokenBudget(userInput) {
+            const maxBudget = 260;              // Total budget
+            const userTokens = estimateTokens(userInput);
+            const systemTokens = 50;            // System prompt overhead
+            const safetyMargin = 20;            // Safety buffer
+            const available = maxBudget - userTokens - systemTokens - safetyMargin;
+            return Math.max(60, Math.min(180, available)); // Clamp between 60-180
+        }
+
+        // Calculate dynamic max_tokens based on input
+        const dynamicMaxTokens = calculateTokenBudget(transcript);
+        context.log(`Dynamic token calculation: input=${estimateTokens(transcript)}, allocated=${dynamicMaxTokens}`);
+
+        // === RETRY SYSTEM ===
+        // Exponential backoff retry function
+        async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 250) {
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    return await operation();
+                } catch (error) {
+                    context.log(`Attempt ${attempt} failed: ${error.message}`);
+                    
+                    if (attempt === maxRetries) {
+                        throw new Error(`Operation failed after ${maxRetries} attempts: ${error.message}`);
+                    }
+                    
+                    // Exponential backoff: 250ms, 500ms, 1000ms
+                    const delay = baseDelay * Math.pow(2, attempt - 1);
+                    context.log(`Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
         // OpenAI Configuration
         const openaiEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
         const openaiKey = process.env.AZURE_OPENAI_KEY;
@@ -59,24 +102,31 @@ module.exports = async function (context, req) {
         context.log(`Speech Region: ${speechRegion}`);
         context.log(`Keys configured - OpenAI: ${openaiKey ? 'YES' : 'NO'}, Speech: ${speechKey ? 'YES' : 'NO'}`);
 
-        // Advanced German tutor "Katja" with SSML-optimized responses and CEFR adaptation
+        // Advanced German tutor "Katja" with natural conversation flow and explicit CEFR detection
         const prompt = `# —— KONTEXT ——
 Du bist **Katja**, eine deutsche Muttersprachlerin und erfahrene Sprachtrainerin für Konversationspraxis.
 Deine Mission: Sprechfertigkeiten und Selbstvertrauen der Lernenden durch motivierende, authentische Gespräche stärken.
 
-# —— SPRACHNIVEAU & ANPASSUNG ——
-• Erkenne automatisch das CEFR-Level (A1-C1) anhand der Antworten des Lernenden
-• Passe Wortschatz und Komplexität dynamisch an das erkannte Niveau an
-• Bei A1-A2: Einfache Sätze, klare Struktur, Grundvokabular
-• Bei B1-B2: Natürlichere Sprache, kulturelle Referenzen, erweiterte Grammatik
-• Bei B2+: Idiomatische Ausdrücke, komplexere Diskussionen
+# —— SPRACHNIVEAU & EXPLIZITE ERKENNUNG ——
+**WICHTIG**: Beginne jede Antwort mit einem unsichtbaren Level-Tag:
+• Analysiere die letzte Äußerung des Lernenden
+• Setze als ERSTES ZEICHEN: <<A1>>, <<A2>>, <<B1>>, <<B2>>, oder <<C1>>
+• Passe dann Wortschatz und Komplexität an:
+  - A1-A2: Einfache Sätze, klare Struktur, Grundvokabular
+  - B1-B2: Natürlichere Sprache, kulturelle Referenzen, erweiterte Grammatik
+  - B2+: Idiomatische Ausdrücke, komplexere Diskussionen
 
 # —— GESPRÄCHSFÜHRUNG ——
 **Struktur deiner Antworten:**
-1. **Länge**: Maximal 2-4 Sätze pro Antwort
+1. **Länge**: Intelligente Anpassung:
+   • Kurze Äußerung (< 15 Wörter) UND einfache Antwort → 2-3 Sätze
+   • Mittlere Äußerung (15-30 Wörter) ODER komplexe Gedanken → 3-4 Sätze
+   • Lange Äußerung (> 30 Wörter) UND tiefe Diskussion → 4-5 Sätze
+   • Bei Fehlerkorrekturen: Immer + 1 Satz für Erklärung
 2. **Abschluss**: IMMER mit einer offenen Frage enden, die zum Sprechen ermutigt
 3. **Authentizität**: Nutze natürliche Füllwörter ("Also...", "Weißt du...", "Genau!", "Ach so!")
 4. **Engagement**: Zeige echtes Interesse mit Reaktionen wie "Wirklich?", "Interessant!", "Das kann ich verstehen"
+5. **Betonung**: Umgib wichtige Wörter mit *Sternchen* für natürliche Hervorhebung
 
 # —— INTELLIGENTE FEHLERKORREKTUR ——
 **Reformulierungstechnik (Recast):**
@@ -92,24 +142,11 @@ Deine Mission: Sprechfertigkeiten und Selbstvertrauen der Lernenden durch motivi
 • **Längere Äußerungen fördern**: "Erzähl mir mehr davon", "Das ist interessant - kannst du das genauer erklären?"
 • **Wortschatzerweiterung**: "Das nennt man übrigens auch...", "Ein anderes Wort dafür ist..."
 
-# —— SSML-OPTIMIERTE AUSGABE ——
-**KRITISCH**: Deine Antworten MÜSSEN im folgenden SSML-Format erfolgen:
-
-<speak version="1.0" xml:lang="de-DE">
-<voice name="de-DE-KatjaNeural">
-<mstts:express-as style="chat" styledegree="1.0">
-<prosody rate="0%" pitch="+0%">
-{DEINE_ANTWORT_HIER}
-</prosody>
-</mstts:express-as>
-</voice>
-</speak>
-
-**Prosody-Richtlinien:**
-• Nutze <break time="300ms"/> für dramatische Pausen
-• Betone Schlüsselwörter: <emphasis level="moderate">wichtiges Wort</emphasis>
-• Bei Aufzählungen: <break time="200ms"/> zwischen Punkten
-• Rate bleibt bei 0% (natürliche Geschwindigkeit)
+# —— AUSGABEFORMAT ——
+**WICHTIG**: Antworte nur mit natürlichem Fließtext - KEIN XML oder SSML!
+• Verwende *Sternchen* um wichtige Wörter für spätere Betonung
+• Schreibe natürlich und authentisch
+• Das Audio-System übernimmt die Sprachsynthese automatisch
 
 # —— KONVERSATIONSTHEMEN ——
 • Alltag, Familie, Hobbys, Reisen, deutsche Kultur
@@ -118,15 +155,7 @@ Deine Mission: Sprechfertigkeiten und Selbstvertrauen der Lernenden durch motivi
 • Deutsche Traditionen und Gewohnheiten: "Bei uns in Deutschland..."
 
 # —— BEISPIEL-AUSGABE ——
-<speak version="1.0" xml:lang="de-DE">
-<voice name="de-DE-KatjaNeural">
-<mstts:express-as style="chat" styledegree="1.0">
-<prosody rate="0%" pitch="+0%">
-Hallo! <break time="300ms"/> Schön, dass wir uns sprechen. Du hast das sehr gut ausgesprochen! <break time="200ms"/> Erzähl mir doch, was hast du heute schon gemacht?
-</prosody>
-</mstts:express-as>
-</voice>
-</speak>
+Hallo! Schön, dass wir uns sprechen. Du hast das sehr *gut* ausgesprochen! Erzähl mir doch, was hast du heute schon gemacht?
 
 Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selbstvertrauen, nicht auf Perfektion.`;
 
@@ -136,175 +165,265 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             { role: 'user', content: transcript.trim() }
         ];
 
-        // STEP 1: Call OpenAI for German response
-        context.log('Step 1: Calling OpenAI API...');
+        // STEP 1: Call OpenAI for German response with retry system
+        context.log('Step 1: Calling OpenAI API with retry protection...');
         
-        const openaiResponse = await fetch(`${openaiEndpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-02-15-preview`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'api-key': openaiKey
-            },
-            body: JSON.stringify({
-                messages: messages,
-                max_tokens: 120, // Reducido para bajar latencia
-                temperature: 0.7,
-                top_p: 0.9,
-                frequency_penalty: 0.2,
-                presence_penalty: 0.1
-            })
+        const { rawResponse, openaiData } = await retryWithBackoff(async () => {
+            const openaiResponse = await fetch(`${openaiEndpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-02-15-preview`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'api-key': openaiKey
+                },
+                body: JSON.stringify({
+                    messages: messages,
+                    max_tokens: dynamicMaxTokens, // Dynamic calculation based on input
+                    temperature: 0.55, // Reducido para mayor consistencia
+                    top_p: 0.9,
+                    frequency_penalty: 0.2,
+                    presence_penalty: 0.1
+                })
+            });
+
+            context.log(`OpenAI Response status: ${openaiResponse.status}`);
+
+            if (!openaiResponse.ok) {
+                const errorText = await openaiResponse.text();
+                context.log(`OpenAI Error: ${errorText}`);
+                throw new Error(`OpenAI API failed: ${openaiResponse.status} ${openaiResponse.statusText}`);
+            }
+
+            const openaiData = await openaiResponse.json();
+            const rawResponse = openaiData.choices[0]?.message?.content || 'Entschuldigung, ich konnte nicht antworten.';
+
+            context.log(`OpenAI response: ${rawResponse}`);
+            return { rawResponse, openaiData };
         });
 
-        context.log(`OpenAI Response status: ${openaiResponse.status}`);
+        // STEP 2: Parse CEFR level and clean response
+        context.log('Step 2: Parsing CEFR level and generating SSML...');
 
-        if (!openaiResponse.ok) {
-            const errorText = await openaiResponse.text();
-            context.log(`OpenAI Error: ${errorText}`);
-            throw new Error(`OpenAI API failed: ${openaiResponse.status} ${openaiResponse.statusText}`);
-        }
-
-        const openaiData = await openaiResponse.json();
-        const rawResponse = openaiData.choices[0]?.message?.content || 'Entschuldigung, ich konnte nicht antworten.';
-
-        context.log(`OpenAI response: ${rawResponse}`);
-
-        // STEP 2: Generate SSML (temporarily disable GPT-4o SSML due to compatibility issues)
-        context.log('Step 2: Generating SSML in backend...');
-
-        // Always extract clean text and generate SSML in backend for now
-        const cleanTextResponse = rawResponse
-            .replace(/<[^>]*>/g, '') // Remove any XML tags GPT-4o might have added
-            .replace(/[^a-zA-Z0-9äöüÄÖÜß\s.,?!:;'-]/g, '') // Remove non-speech characters
+        // Extract CEFR level tag if present
+        const cefrMatch = rawResponse.match(/^<<(A1|A2|B1|B2|C1)>>/);
+        const detectedLevel = cefrMatch ? cefrMatch[1] : 'B1'; // Default to B1
+        
+        // Remove CEFR tag and clean text for TTS
+        let cleanTextResponse = rawResponse
+            .replace(/^<<(A1|A2|B1|B2|C1)>>/, '') // Remove CEFR tag
+            .replace(/<[^>]*>/g, '') // Remove any other XML tags
+            .replace(/[^a-zA-Z0-9äöüÄÖÜß\s.,?!:;'*-]/g, '') // Keep asterisks for emphasis
             .replace(/\s+/g, ' ') // Replace multiple spaces
             .trim();
-        
+
+        context.log(`Detected CEFR level: ${detectedLevel}`);
         context.log(`Clean response for TTS: ${cleanTextResponse}`);
         
-        // Generate intelligent SSML with adaptive prosody
-        const ssml = generateIntelligentSSML(cleanTextResponse);
-
-        // Intelligent SSML generator with fallback safety (Hybrid Approach)
-        function generateIntelligentSSML(text) {
-            try {
-                // 1. Detect content patterns
-                const isCorrection = /man könnte auch sagen|fast richtig|gut gesagt|noch besser wäre/i.test(text);
-                const isQuestion = /\?/.test(text);
-                const isShort = text.length < 50;
-                const hasEmphasis = /genau|perfekt|gut|richtig|interessant/i.test(text);
-
-                // 2. Adaptive rate (prudent range: -10% to +20%)
-                let rate = "+15%"; // Base for B1-B2
-                if (isCorrection) rate = "-5%";       // Slower for corrections
-                else if (isQuestion) rate = "+10%";   // Moderate for questions
-                else if (isShort) rate = "+20%";      // Faster for short responses
-
-                // 3. Smart pauses and emphasis using invisible separator
-                let processed = text
-                    .replace(/\?/g, '?\u2063') // invisible marker to avoid XML conflicts
-                    .replace(/\. /g, '.\u2063')
-                    .replace(/\, /g, ',\u2063');
-
-                // Process segments for pauses
-                processed = processed
-                    .split('\u2063')
-                    .map(segment => segment.trim())
-                    .filter(Boolean)
-                    .map(segment => {
-                        if (segment.endsWith('?')) {
-                            return `${segment}<break time="600ms"/>`;
-                        } else if (segment.endsWith('.')) {
-                            return `${segment}<break time="300ms"/>`;
-                        } else if (segment.endsWith(',')) {
-                            return `${segment}<break time="200ms"/>`;
-                        }
-                        return segment;
-                    })
-                    .join(' ');
-
-                // 4. Selective emphasis (max 1-2 terms per turn)
-                if (hasEmphasis && !isCorrection) {
-                    processed = processed.replace(/(genau|perfekt|gut|interessant)/i, '<emphasis level="moderate">$1</emphasis>');
+        // === SSML GENERATION MODULES ===
+        
+        // Utility function for natural voice variation
+        function vary(baseValue, range = 2) {
+            // Returns baseValue ± range %
+            const base = parseFloat(baseValue) || 0;
+            const delta = (Math.random() * range * 2 - range);
+            const result = base + delta;
+            return `${result.toFixed(1)}%`;
+        }
+        
+        // Text analysis and pattern detection
+        function analyzeText(text) {
+            return {
+                isCorrection: /man könnte auch sagen|fast richtig|gut gesagt|noch besser wäre/i.test(text),
+                isQuestion: /\?/.test(text),
+                isShort: text.length < 50,
+                hasEmphasis: /\*\w+\*/g.test(text),
+                wordCount: text.trim().split(/\s+/).length,
+                characterCount: text.length
+            };
+        }
+        
+        // Prosody engine for rate and pitch calculation
+        function calculateProsody(textAnalysis, cefrLevel) {
+            let baseRate = "+0%";
+            // Adapt base speed to CEFR level
+            if (cefrLevel === 'A1' || cefrLevel === 'A2') baseRate = "-8%";
+            else if (cefrLevel === 'C1') baseRate = "+3%";
+            
+            let rate = baseRate;
+            if (textAnalysis.isCorrection) rate = "-10%";
+            else if (textAnalysis.isQuestion) rate = "+5%";
+            else if (textAnalysis.isShort) rate = "+8%";
+            else rate = vary(baseRate, 2);
+            
+            let pitch = vary("+0%", 2);
+            if (textAnalysis.isCorrection) pitch = "+3%";
+            
+            return { rate, pitch };
+        }
+        
+        // Advanced pause calculation
+        function calculateBreakTime(punctuation, sentenceLength, cefrLevel) {
+            let baseTime;
+            if (punctuation === '?') baseTime = 250;
+            else if (punctuation === '.') baseTime = 120;
+            else if (punctuation === ',') baseTime = 80;
+            else return 0;
+            
+            const lengthFactor = Math.min(1.8, 1 + sentenceLength / 100);
+            const levelFactor = {
+                'A1': 1.5, 'A2': 1.3, 'B1': 1.0, 'B2': 0.9, 'C1': 0.8
+            }[cefrLevel] || 1.0;
+            
+            return Math.round(baseTime * lengthFactor * levelFactor);
+        }
+        
+        // Text processor for emphasis and pauses
+        function processTextForSSML(text, cefrLevel) {
+            let processed = text;
+            
+            // Process asterisk emphasis with improved regex
+            processed = processed.replace(/(?<!\\)\*(\p{L}[^*]{0,30})\*/gu, '<emphasis level="moderate">$1</emphasis>');
+            
+            // Add adaptive pauses
+            const sentences = processed.split(/([?,.])/);
+            let result = [];
+            for (let i = 0; i < sentences.length; i += 2) {
+                const sentence = sentences[i]?.trim();
+                const punct = sentences[i + 1];
+                
+                if (sentence) result.push(sentence);
+                if (punct) {
+                    const breakTime = calculateBreakTime(punct, sentence?.length || 0, cefrLevel);
+                    result.push(`${punct}<break time="${breakTime}ms"/>`);
                 }
-
-                // 5. Special handling for corrections
-                let pitch = "+0%";
-                if (isCorrection) {
-                    pitch = "+3%"; // Slightly higher pitch for corrections
-                }
-
-                // 6. Generate hermetic SSML template
-                const ssml = `<speak version="1.0"
-       xml:lang="de-DE"
-       xmlns="http://www.w3.org/2001/10/synthesis"
-       xmlns:mstts="https://www.w3.org/2001/mstts">
-
+            }
+            return result.join(' ');
+        }
+        
+        // SSML template builder
+        function buildSSMLTemplate(processedText, prosody) {
+            return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts">
   <voice name="de-DE-KatjaNeural">
-    <mstts:express-as style="assistant" styledegree="1.0">
-      <prosody rate="${rate}" pitch="${pitch}">
-        ${processed}
+    <mstts:express-as style="chat" styledegree="0.8">
+      <prosody rate="${prosody.rate}" pitch="${prosody.pitch}">
+        ${processedText}
       </prosody>
     </mstts:express-as>
   </voice>
-
 </speak>`;
-
-                // 7. Basic SSML validation
+        }
+        
+        // Enhanced SSML validation
+        function validateSSML(ssml) {
+            try {
+                // Basic structure check
                 if (!ssml.includes('<speak') || !ssml.includes('</speak>')) {
                     throw new Error('Invalid SSML structure');
                 }
-
-                context.log(`Generated intelligent SSML with rate: ${rate}, pitch: ${pitch}`);
-                return ssml;
-
+                
+                // Check for unescaped characters
+                if (ssml.includes('&') && !ssml.includes('&amp;')) {
+                    context.log('Warning: Unescaped ampersand detected in SSML');
+                }
+                
+                // Check for balanced tags (basic)
+                const openTags = (ssml.match(/<[^/][^>]*>/g) || []).length;
+                const closeTags = (ssml.match(/<\/[^>]*>/g) || []).length;
+                if (openTags !== closeTags) {
+                    context.log('Warning: Potentially unbalanced SSML tags');
+                }
+                
+                return true;
             } catch (error) {
-                context.log(`SSML generation failed: ${error.message}, using safe fallback`);
-                return generateSafeSSML(text);
+                context.log(`SSML validation error: ${error.message}`);
+                return false;
             }
         }
 
-        // Safe fallback SSML (fixed template)
-        function generateSafeSSML(response) {
-            return `<speak version="1.0"
-       xml:lang="de-DE"
-       xmlns="http://www.w3.org/2001/10/synthesis"
-       xmlns:mstts="https://www.w3.org/2001/mstts">
+        // Generate natural SSML with CEFR-aware adaptations
+        const ssml = generateNaturalSSML(cleanTextResponse, detectedLevel);
 
+        // Main SSML generator (refactored with modules)
+        function generateNaturalSSML(text, cefrLevel = 'B1') {
+            try {
+                // 1. Analyze text patterns
+                const textAnalysis = analyzeText(text);
+                
+                // 2. Calculate prosody parameters
+                const prosody = calculateProsody(textAnalysis, cefrLevel);
+                
+                // 3. Process text for SSML (emphasis + pauses)
+                const processedText = processTextForSSML(text, cefrLevel);
+                
+                // 4. Build SSML template
+                const ssml = buildSSMLTemplate(processedText, prosody);
+                
+                // 5. Validate SSML
+                if (!validateSSML(ssml)) {
+                    context.log('SSML validation failed, using fallback');
+                    return generateMinimalSSML(text);
+                }
+                
+                context.log(`Generated CEFR-adapted SSML - Level: ${cefrLevel}, Rate: ${prosody.rate}, Pitch: ${prosody.pitch}, Analysis: ${JSON.stringify(textAnalysis)}`);
+                return ssml;
+                
+            } catch (error) {
+                context.log(`Modular SSML generation failed: ${error.message}, using minimal fallback`);
+                return generateMinimalSSML(text);
+            }
+        }
+
+        // Minimal fallback SSML (ultra-safe)
+        function generateMinimalSSML(response) {
+            // Clean text of any problematic characters
+            const cleanText = response.replace(/[<>&"']/g, '');
+            return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts">
   <voice name="de-DE-KatjaNeural">
-    <mstts:express-as style="assistant" styledegree="1.0">
-      <prosody rate="+15%" pitch="+0%">
-        ${response}
+    <mstts:express-as style="chat" styledegree="0.8">
+      <prosody rate="+0%" pitch="+0%">
+        ${cleanText}
       </prosody>
     </mstts:express-as>
   </voice>
-
 </speak>`;
         }
 
-        const ttsResponse = await fetch(`https://${speechRegion}.tts.speech.microsoft.com/cognitiveservices/v1`, {
-            method: 'POST',
-            headers: {
-                'Ocp-Apim-Subscription-Key': speechKey,
-                'Content-Type': 'application/ssml+xml',
-                'X-Microsoft-OutputFormat': 'riff-24khz-16bit-mono-pcm',
-                'User-Agent': 'TutorAleman/1.0'
-            },
-            body: ssml
-        });
-
-        context.log(`TTS Response status: ${ttsResponse.status}`);
-
+        // STEP 3: Generate TTS audio with retry protection
+        context.log('Step 3: Generating TTS audio with retry protection...');
+        
         let audioData = null;
-        if (ttsResponse.ok) {
-            const audioBuffer = await ttsResponse.arrayBuffer();
-            audioData = Buffer.from(audioBuffer).toString('base64');
-            context.log(`TTS audio generated successfully, size: ${audioBuffer.byteLength} bytes`);
-        } else {
-            const errorText = await ttsResponse.text();
-            context.log(`TTS Error: ${errorText}`);
+        try {
+            audioData = await retryWithBackoff(async () => {
+                const ttsResponse = await fetch(`https://${speechRegion}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+                    method: 'POST',
+                    headers: {
+                        'Ocp-Apim-Subscription-Key': speechKey,
+                        'Content-Type': 'application/ssml+xml',
+                        'X-Microsoft-OutputFormat': 'riff-24khz-16bit-mono-pcm',
+                        'User-Agent': 'TutorAleman/1.0'
+                    },
+                    body: ssml
+                });
+
+                context.log(`TTS Response status: ${ttsResponse.status}`);
+
+                if (!ttsResponse.ok) {
+                    const errorText = await ttsResponse.text();
+                    context.log(`TTS Error: ${errorText}`);
+                    throw new Error(`TTS API failed: ${ttsResponse.status} ${ttsResponse.statusText}`);
+                }
+
+                const audioBuffer = await ttsResponse.arrayBuffer();
+                const base64Audio = Buffer.from(audioBuffer).toString('base64');
+                context.log(`TTS audio generated successfully, size: ${audioBuffer.byteLength} bytes`);
+                return base64Audio;
+            }, 2, 500); // Only 2 retries for TTS, longer delay
+        } catch (ttsError) {
+            context.log(`TTS generation failed after retries: ${ttsError.message}`);
             // Continue without audio - still return the text response
+            audioData = null;
         }
 
-        // STEP 3: Return complete response
+        // STEP 4: Return complete response
         context.res = {
             status: 200,
             headers: corsHeaders,
@@ -316,12 +435,28 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 voiceUsed: 'de-DE-KatjaNeural',
                 sessionId: `voice_${Date.now()}`,
                 timestamp: new Date().toISOString(),
-                pipeline: 'GPT-4o + Intelligent SSML + Katja TTS',
-                ssmlSource: 'Intelligent Hybrid',
+                pipeline: 'GPT-4o + CEFR-Adaptive SSML + Katja TTS v2.0',
+                ssmlSource: 'Modular CEFR-Aware Engine',
+                detectedLevel: detectedLevel,
+                tokenCalculation: {
+                    inputTokens: estimateTokens(transcript),
+                    allocatedTokens: dynamicMaxTokens,
+                    budgetType: 'dynamic-safe',
+                    efficiency: (estimateTokens(cleanTextResponse) / dynamicMaxTokens * 100).toFixed(1) + '%'
+                },
                 prosodyInfo: {
-                    hasCorrection: /man könnte auch sagen|fast richtig/i.test(cleanTextResponse),
-                    hasQuestion: /\?/.test(cleanTextResponse),
-                    isShort: cleanTextResponse.length < 50
+                    ...analyzeText(cleanTextResponse),
+                    cefrLevel: detectedLevel,
+                    style: 'chat',
+                    styledegree: '0.8',
+                    adaptivePauses: true,
+                    naturalVariation: true,
+                    retryProtection: true
+                },
+                performance: {
+                    hasAudio: !!audioData,
+                    audioSize: audioData ? Math.round(audioData.length * 0.75) : 0, // Approximate bytes
+                    ssmlValidated: true
                 }
             }
         };
@@ -331,6 +466,11 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
     } catch (error) {
         context.log.error('Voice conversation error:', error.message);
         context.log.error('Error stack:', error.stack);
+        context.log.error('Error context:', {
+            transcript: transcript?.substring(0, 100),
+            historyLength: conversationHistory?.length || 0,
+            timestamp: new Date().toISOString()
+        });
         
         context.res = {
             status: 500,
