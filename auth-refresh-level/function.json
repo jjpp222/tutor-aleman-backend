@@ -1,0 +1,6 @@
+{
+  "bindings": [
+    { "authLevel": "function", "type": "httpTrigger", "name": "req", "methods": ["PUT"], "route": "auth/refresh-level" },
+    { "type": "http", "direction": "out", "name": "res" }
+  ]
+}

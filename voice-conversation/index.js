@@ -49,7 +49,7 @@ module.exports = async function (context, req) {
                 
                 if (decoded && decoded.userId) {
                     userId = decoded.userId;
-                    userCEFRLevel = await DatabaseService.getUserCEFRLevel(userId);
+                    userCEFRLevel = decoded.cefr || 'B1'; // leer directamente del claim
                     context.log(`User authenticated: ${userId}, CEFR Level: ${userCEFRLevel}`);
                 } else {
                     context.log('Invalid token, using default level B1');

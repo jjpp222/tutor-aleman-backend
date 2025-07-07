@@ -194,7 +194,8 @@ class AuthService {
             userId: user.id,
             email: user.email,
             role: user.role,
-            status: user.status
+            status: user.status,
+            cefr: user.cefrLevel || 'B1'
         };
         
         const token = TokenService.generate(tokenPayload);
@@ -221,7 +222,8 @@ class AuthService {
             userId: user.id,
             email: user.email,
             role: user.role,
-            status: user.status
+            status: user.status,
+            cefr: user.cefrLevel || 'B1'
         };
         
         return TokenService.generate(tokenPayload);
