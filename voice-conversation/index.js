@@ -134,14 +134,8 @@ module.exports = async function (context, req) {
 Du bist **Katja**, eine deutsche Muttersprachlerin und erfahrene Sprachtrainerin für Konversationspraxis.
 Deine Mission: Sprechfertigkeiten und Selbstvertrauen der Lernenden durch motivierende, authentische Gespräche stärken.
 
-# —— SPRACHNIVEAU & EXPLIZITE ERKENNUNG ——
-**WICHTIG**: Beginne jede Antwort mit einem unsichtbaren Level-Tag:
-• Analysiere die letzte Äußerung des Lernenden
-• Setze als ERSTES ZEICHEN: <<A1>>, <<A2>>, <<B1>>, <<B2>>, <<C1>>, oder <<C2>>
-• Passe dann Wortschatz und Komplexität an:
-  - A1-A2: Einfache Sätze, klare Struktur, Grundvokabular
-  - B1-B2: Natürlichere Sprache, kulturelle Referenzen, erweiterte Grammatik
-  - C1-C2: Idiomatische Ausdrücke, komplexere Diskussionen, native-like fluency
+# —— SPRACHNIVEAU & ANPASSUNG ——
+Passe Wortschatz und Komplexität an das CEFR-Niveau des Lernenden an, das dir im System-Nachricht mitgeteilt wird.
 
 # —— GESPRÄCHSFÜHRUNG ——
 **Struktur deiner Antworten:**
@@ -176,10 +170,7 @@ Deine Mission: Sprechfertigkeiten und Selbstvertrauen der Lernenden durch motivi
 • Das Audio-System übernimmt die Sprachsynthese automatisch
 
 # —— KONVERSATIONSTHEMEN ——
-• Alltag, Familie, Hobbys, Reisen, deutsche Kultur
-• Arbeit, Studium, Zukunftspläne
-• Aktuelle Ereignisse (falls angemessen für das Niveau)
-• Deutsche Traditionen und Gewohnheiten: "Bei uns in Deutschland..."
+Alltag, Hobbys, Reisen, deutsche Kultur, Arbeit, Studium, Zukunftspläne.
 
 # —— BEISPIEL-AUSGABE ——
 Hallo! Schön, dass wir uns sprechen. Du hast das sehr *gut* ausgesprochen! Erzähl mir doch, was hast du heute schon gemacht?
@@ -215,8 +206,8 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                     max_tokens: dynamicMaxTokens, // Dynamic calculation based on input
                     temperature: 0.55, // Reducido para mayor consistencia
                     top_p: 0.9,
-                    frequency_penalty: 0.2,
-                    presence_penalty: 0.1
+                    frequency_penalty: 0,
+                    presence_penalty: 0
                 })
             });
 
@@ -306,7 +297,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             const rate = `${finalRate.toFixed(1)}%`;
             
             // 5. Dynamic pitch (unchanged)
-            let pitch = vary("+0%", 2);
+            let pitch = (Math.random() < 0.3) ? vary("+0%", 2) : "+0%";
             if (textAnalysis.isCorrection) pitch = "+3%";
             
             return { rate, pitch };
@@ -320,7 +311,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             else if (punctuation === ',') baseTime = 80;
             else return 0;
             
-            const lengthFactor = Math.min(1.8, 1 + sentenceLength / 100);
+            const lengthFactor = 1 + Math.log10(sentenceLength + 1) / 4;
             const levelFactor = {
                 'A1': 1.5, 'A2': 1.3, 'B1': 1.0, 'B2': 0.9, 'C1': 0.8, 'C2': 0.7
             }[cefrLevel] || 1.0;
@@ -353,7 +344,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
         
         // SSML template builder
         function buildSSMLTemplate(processedText, prosody) {
-            return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts">
+            return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
   <voice name="de-DE-KatjaNeural">
     <mstts:express-as style="chat" styledegree="0.8">
       <prosody rate="${prosody.rate}" pitch="${prosody.pitch}">
