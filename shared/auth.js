@@ -195,7 +195,7 @@ class AuthService {
             email: user.email,
             role: user.role,
             status: user.status,
-            cefr: user.cefrLevel || 'B1'
+            cefr: user.cefrLevel || user.germanLevel || 'B1'
         };
         
         const token = TokenService.generate(tokenPayload);
@@ -223,7 +223,7 @@ class AuthService {
             email: user.email,
             role: user.role,
             status: user.status,
-            cefr: user.cefrLevel || 'B1'
+            cefr: user.cefrLevel || user.germanLevel || 'B1'
         };
         
         return TokenService.generate(tokenPayload);
