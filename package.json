@@ -29,7 +29,8 @@
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
     "node-fetch": "^2.6.12",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "node-cache": "^5.1.2"
   },
   "devDependencies": {
     "azure-functions-core-tools": "^4.0.5455"

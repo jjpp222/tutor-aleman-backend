@@ -285,6 +285,16 @@ const requireStudent = requireAuth([config.roles.STUDENT], [config.statuses.APPR
 const requireAdmin = requireAuth([config.roles.ADMIN]);
 const requireAnyAuth = requireAuth();
 
+// ===== LIGHTWEIGHT JWT VALIDATION =====
+// For performance-critical endpoints that don't need fresh user data
+function validateJWT(token) {
+    try {
+        return TokenService.verify(token);
+    } catch (error) {
+        return null;
+    }
+}
+
 module.exports = {
     AuthService,
     PasswordService,
@@ -293,5 +303,6 @@ module.exports = {
     requireStudent,
     requireAdmin,
     requireAnyAuth,
+    validateJWT,
     config
 };

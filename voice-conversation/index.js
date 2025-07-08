@@ -1,6 +1,26 @@
 const fetch = require('node-fetch');
+const https = require('https');
+const http = require('http');
+
+// Create persistent HTTP agents for connection pooling
+const httpsAgent = new https.Agent({
+    keepAlive: true,
+    maxSockets: 10,
+    maxFreeSockets: 5,
+    timeout: 5000,
+    keepAliveMsecs: 30000
+});
+
+const httpAgent = new http.Agent({
+    keepAlive: true,
+    maxSockets: 10,
+    maxFreeSockets: 5,
+    timeout: 5000,
+    keepAliveMsecs: 30000
+});
 const { DatabaseService } = require('../shared/database');
 const { validateJWT } = require('../shared/auth');
+const { CacheService } = require('../shared/cache');
 
 module.exports = async function (context, req) {
     context.log('Voice conversation with corrected Speech Services key');
@@ -37,7 +57,7 @@ module.exports = async function (context, req) {
             return;
         }
 
-        // Validate JWT token and get user info
+        // Validate JWT token and get user info (optimized - no DB calls)
         let userId = null;
         let userCEFRLevel = 'B1'; // Default fallback
         
@@ -49,7 +69,7 @@ module.exports = async function (context, req) {
                 
                 if (decoded && decoded.userId) {
                     userId = decoded.userId;
-                    userCEFRLevel = decoded.cefr || 'B1'; // leer directamente del claim
+                    userCEFRLevel = decoded.cefr || 'B1'; // Read directly from JWT claim (no DB call)
                     context.log(`User authenticated: ${userId}, CEFR Level: ${userCEFRLevel}`);
                 } else {
                     context.log('Invalid token, using default level B1');
@@ -73,23 +93,29 @@ module.exports = async function (context, req) {
             return Math.ceil(words * 0.75);
         }
 
-        // Safe token budget calculation
-        function calculateTokenBudget(userInput) {
-            const maxBudget = 260;              // Total budget
+        // Advanced token budget calculation with conversation context
+        function calculateTokenBudget(userInput, conversationLength = 0, cefrLevel = 'B1') {
+            const maxBudget = 280;              // Increased total budget
             const userTokens = estimateTokens(userInput);
-            const systemTokens = 50;            // System prompt overhead
-            const safetyMargin = 20;            // Safety buffer
-            const available = maxBudget - userTokens - systemTokens - safetyMargin;
-            return Math.max(60, Math.min(180, available)); // Clamp between 60-180
+            const systemTokens = 45;            // Optimized system prompt overhead
+            const safetyMargin = 15;            // Reduced safety buffer
+            
+            // Dynamic allocation based on conversation length and CEFR level
+            let contextBonus = 0;
+            if (conversationLength > 5) contextBonus += 10;    // More context = more tokens
+            if (cefrLevel === 'C1' || cefrLevel === 'C2') contextBonus += 15; // Advanced users get more
+            
+            const available = maxBudget - userTokens - systemTokens - safetyMargin + contextBonus;
+            return Math.max(70, Math.min(200, available)); // Expanded range: 70-200
         }
 
-        // Calculate dynamic max_tokens based on input
-        const dynamicMaxTokens = calculateTokenBudget(transcript);
-        context.log(`Dynamic token calculation: input=${estimateTokens(transcript)}, allocated=${dynamicMaxTokens}`);
+        // Calculate dynamic max_tokens based on input and context
+        const dynamicMaxTokens = calculateTokenBudget(transcript, conversationHistory?.length || 0, userCEFRLevel);
+        context.log(`Advanced token calculation: input=${estimateTokens(transcript)}, allocated=${dynamicMaxTokens}, context=${conversationHistory?.length || 0}, level=${userCEFRLevel}`);
 
         // === RETRY SYSTEM ===
-        // Exponential backoff retry function
-        async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 250) {
+        // Optimized retry function for conversational AI
+        async function retryWithBackoff(operation, maxRetries = 2, baseDelay = 100) {
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
                     return await operation();
@@ -100,7 +126,7 @@ module.exports = async function (context, req) {
                         throw new Error(`Operation failed after ${maxRetries} attempts: ${error.message}`);
                     }
                     
-                    // Exponential backoff: 250ms, 500ms, 1000ms
+                    // Faster retry: 100ms, 200ms instead of 250ms, 500ms, 1000ms
                     const delay = baseDelay * Math.pow(2, attempt - 1);
                     context.log(`Retrying in ${delay}ms...`);
                     await new Promise(resolve => setTimeout(resolve, delay));
@@ -199,16 +225,19 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'api-key': openaiKey
+                    'api-key': openaiKey,
+                    'Connection': 'keep-alive'
                 },
                 body: JSON.stringify({
                     messages: messages,
-                    max_tokens: dynamicMaxTokens, // Dynamic calculation based on input
-                    temperature: 0.55, // Reducido para mayor consistencia
-                    top_p: 0.9,
-                    frequency_penalty: 0,
-                    presence_penalty: 0
-                })
+                    max_tokens: dynamicMaxTokens, // Advanced calculation with context
+                    temperature: 0.50, // Reduced for consistency and speed
+                    top_p: 0.85, // Reduced for faster generation
+                    frequency_penalty: 0.1, // Slight penalty for repetition
+                    presence_penalty: 0.05 // Slight penalty for word reuse
+                }),
+                agent: openaiEndpoint.startsWith('https://') ? httpsAgent : httpAgent,
+                timeout: 8000 // 8 second timeout for OpenAI calls
             });
 
             context.log(`OpenAI Response status: ${openaiResponse.status}`);
@@ -382,6 +411,45 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             }
         }
 
+        // Check TTS cache first
+        const textHash = CacheService.hashText(cleanTextResponse);
+        let cachedAudio = CacheService.getTTSAudio(textHash, 'de-DE-KatjaNeural', userCEFRLevel);
+        
+        if (cachedAudio) {
+            context.log(`TTS cache hit for hash: ${textHash}`);
+            // Return cached response immediately
+            context.res = {
+                status: 200,
+                headers: corsHeaders,
+                body: {
+                    success: true,
+                    germanResponse: cleanTextResponse,
+                    audioData: cachedAudio,
+                    transcript: transcript,
+                    voiceUsed: 'de-DE-KatjaNeural',
+                    sessionId: `voice_${Date.now()}`,
+                    timestamp: new Date().toISOString(),
+                    pipeline: 'GPT-4o + CEFR-Adaptive SSML + Cached TTS',
+                    ssmlSource: 'Cached Audio',
+                    detectedLevel: detectedLevel,
+                    appliedLevel: userCEFRLevel,
+                    tokenCalculation: {
+                        inputTokens: estimateTokens(transcript),
+                        allocatedTokens: dynamicMaxTokens,
+                        budgetType: 'dynamic-safe',
+                        efficiency: (estimateTokens(cleanTextResponse) / dynamicMaxTokens * 100).toFixed(1) + '%'
+                    },
+                    performance: {
+                        hasAudio: true,
+                        audioSize: Math.round(cachedAudio.length * 0.75),
+                        ssmlValidated: true,
+                        cacheHit: true
+                    }
+                }
+            };
+            return;
+        }
+        
         // Generate natural SSML with user's confirmed CEFR level  
         const ssml = generateNaturalSSML(cleanTextResponse, userCEFRLevel);
 
@@ -442,9 +510,12 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                         'Ocp-Apim-Subscription-Key': speechKey,
                         'Content-Type': 'application/ssml+xml',
                         'X-Microsoft-OutputFormat': 'riff-24khz-16bit-mono-pcm',
-                        'User-Agent': 'TutorAleman/1.0'
+                        'User-Agent': 'TutorAleman/1.0',
+                        'Connection': 'keep-alive'
                     },
-                    body: ssml
+                    body: ssml,
+                    agent: httpsAgent,
+                    timeout: 6000 // 6 second timeout for TTS calls
                 });
 
                 context.log(`TTS Response status: ${ttsResponse.status}`);
@@ -458,6 +529,11 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 const audioBuffer = await ttsResponse.arrayBuffer();
                 const base64Audio = Buffer.from(audioBuffer).toString('base64');
                 context.log(`TTS audio generated successfully, size: ${audioBuffer.byteLength} bytes`);
+                
+                // Cache the generated audio
+                CacheService.setTTSAudio(textHash, 'de-DE-KatjaNeural', userCEFRLevel, base64Audio);
+                context.log(`TTS audio cached with hash: ${textHash}`);
+                
                 return base64Audio;
             }, 2, 500); // Only 2 retries for TTS, longer delay
         } catch (ttsError) {
@@ -501,7 +577,12 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 performance: {
                     hasAudio: !!audioData,
                     audioSize: audioData ? Math.round(audioData.length * 0.75) : 0, // Approximate bytes
-                    ssmlValidated: true
+                    ssmlValidated: true,
+                    cacheHit: false,
+                    cacheStats: {
+                        userProfiles: CacheService.getUserProfileStats(),
+                        ttsAudio: CacheService.getTTSCacheStats()
+                    }
                 }
             }
         };
