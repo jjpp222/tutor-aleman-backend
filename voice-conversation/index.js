@@ -95,7 +95,7 @@ module.exports = async function (context, req) {
 
         // Advanced token budget calculation with conversation context
         function calculateTokenBudget(userInput, conversationLength = 0, cefrLevel = 'B1') {
-            const maxBudget = 280;              // Increased total budget
+            const maxBudget = 350;              // Increased total budget for advanced levels
             const userTokens = estimateTokens(userInput);
             const systemTokens = 45;            // Optimized system prompt overhead
             const safetyMargin = 15;            // Reduced safety buffer
@@ -103,10 +103,10 @@ module.exports = async function (context, req) {
             // Dynamic allocation based on conversation length and CEFR level
             let contextBonus = 0;
             if (conversationLength > 5) contextBonus += 10;    // More context = more tokens
-            if (cefrLevel === 'C1' || cefrLevel === 'C2') contextBonus += 15; // Advanced users get more
+            if (cefrLevel === 'C1' || cefrLevel === 'C2') contextBonus += 30; // Advanced users get more
             
             const available = maxBudget - userTokens - systemTokens - safetyMargin + contextBonus;
-            return Math.max(70, Math.min(200, available)); // Expanded range: 70-200
+            return Math.max(70, Math.min(280, available)); // Expanded range: 70-280
         }
 
         // Calculate dynamic max_tokens based on input and context
