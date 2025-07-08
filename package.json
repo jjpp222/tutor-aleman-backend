@@ -21,16 +21,16 @@
     "url": "https://github.com/jjpp222/tutor-aleman-backend.git"
   },
   "dependencies": {
-    "@azure/functions": "^4.5.1",
     "@azure/cosmos": "^4.1.1",
+    "@azure/functions": "^4.5.1",
     "@azure/storage-blob": "^12.17.0",
-    "microsoft-cognitiveservices-speech-sdk": "^1.35.0",
-    "openai": "^4.28.0",
-    "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "microsoft-cognitiveservices-speech-sdk": "^1.35.0",
+    "node-cache": "^5.1.2",
     "node-fetch": "^2.6.12",
-    "uuid": "^9.0.0",
-    "node-cache": "^5.1.2"
+    "openai": "^4.28.0",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "azure-functions-core-tools": "^4.0.5455"
