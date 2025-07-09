@@ -93,20 +93,21 @@ module.exports = async function (context, req) {
             return Math.ceil(words * 0.75);
         }
 
-        // Advanced token budget calculation with conversation context
+        // Advanced token budget calculation with conversation context - EXPANDED FOR COMPLETE RESPONSES
         function calculateTokenBudget(userInput, conversationLength = 0, cefrLevel = 'B1') {
-            const maxBudget = 350;              // Increased total budget for advanced levels
+            const maxBudget = 600;              // Significantly increased total budget
             const userTokens = estimateTokens(userInput);
             const systemTokens = 45;            // Optimized system prompt overhead
-            const safetyMargin = 15;            // Reduced safety buffer
+            const safetyMargin = 20;            // Slightly increased safety buffer
             
             // Dynamic allocation based on conversation length and CEFR level
             let contextBonus = 0;
-            if (conversationLength > 5) contextBonus += 10;    // More context = more tokens
-            if (cefrLevel === 'C1' || cefrLevel === 'C2') contextBonus += 30; // Advanced users get more
+            if (conversationLength > 5) contextBonus += 15;    // More context = more tokens
+            if (cefrLevel === 'C1' || cefrLevel === 'C2') contextBonus += 50; // Advanced users get significantly more
+            else if (cefrLevel === 'B1' || cefrLevel === 'B2') contextBonus += 25; // Intermediate users get more
             
             const available = maxBudget - userTokens - systemTokens - safetyMargin + contextBonus;
-            return Math.max(70, Math.min(280, available)); // Expanded range: 70-280
+            return Math.max(120, Math.min(500, available)); // Expanded range: 120-500 (much more generous)
         }
 
         // Calculate dynamic max_tokens based on input and context
@@ -165,11 +166,12 @@ Passe Wortschatz und Komplexität an das CEFR-Niveau des Lernenden an, das dir i
 
 # —— GESPRÄCHSFÜHRUNG ——
 **Struktur deiner Antworten:**
-1. **Länge**: Intelligente Anpassung:
-   • Kurze Äußerung (< 15 Wörter) UND einfache Antwort → 2-3 Sätze
-   • Mittlere Äußerung (15-30 Wörter) ODER komplexe Gedanken → 3-4 Sätze
-   • Lange Äußerung (> 30 Wörter) UND tiefe Diskussion → 4-5 Sätze
-   • Bei Fehlerkorrekturen: Immer + 1 Satz für Erklärung
+1. **Länge**: Intelligente Anpassung (VOLLSTÄNDIGE Antworten):
+   • Kurze Äußerung (< 15 Wörter) UND einfache Antwort → 2-3 vollständige Sätze
+   • Mittlere Äußerung (15-30 Wörter) ODER komplexe Gedanken → 3-4 vollständige Sätze
+   • Lange Äußerung (> 30 Wörter) UND tiefe Diskussion → 4-6 vollständige Sätze
+   • Bei Fehlerkorrekturen: Immer + 1-2 zusätzliche Sätze für Erklärung
+   • WICHTIG: Beende IMMER deine Gedanken vollständig. Keine abgeschnittenen Sätze!
 2. **Abschluss**: IMMER mit einer offenen Frage enden, die zum Sprechen ermutigt
 3. **Authentizität**: Nutze natürliche Füllwörter ("Also...", "Weißt du...", "Genau!", "Ach so!")
 4. **Engagement**: Zeige echtes Interesse mit Reaktionen wie "Wirklich?", "Interessant!", "Das kann ich verstehen"
@@ -204,6 +206,7 @@ Passe Wortschatz und Komplexität an das CEFR-Niveau des Lernenden an, das dir i
 • Verwende *Sternchen* um wichtige Wörter für spätere Betonung
 • Schreibe natürlich und authentisch mit PERFEKTER Interpunktion
 • Das Audio-System übernimmt die Sprachsynthese automatisch
+• NIEMALS abgeschnittene oder unvollständige Antworten - beende jeden Gedanken komplett!
 
 # —— KONVERSATIONSTHEMEN ——
 Alltag, Hobbys, Reisen, deutsche Kultur, Arbeit, Studium, Zukunftspläne.
