@@ -321,8 +321,8 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             };
         }
         
-        // Prosody engine for rate and pitch calculation with C2 support
-        function calculateProsody(textAnalysis, cefrLevel, turnCount = 0) {
+        // Prosody engine for rate and pitch calculation with C2 support and voice-specific optimization
+        function calculateProsody(textAnalysis, cefrLevel, turnCount = 0, voiceName = 'de-DE-KatjaNeural') {
             // CEFR-based rates (WPM optimized)
             const baseRates = {
                 'A1': -3,   // ~117 wpm
@@ -336,34 +336,57 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             // 1. Base rate according to CEFR level
             let rateValue = baseRates[cefrLevel] ?? 10; // Default to B1 if unknown
             
-            // 2. Contextual adjustments
+            // 2. Voice-specific adjustments for naturalness
+            if (voiceName === 'de-DE-ConradNeural') {
+                // Conrad Neural needs slightly different pacing for naturalness
+                rateValue -= 2; // Slightly slower base rate
+                if (textAnalysis.isQuestion) rateValue += 1; // Less aggressive question speed
+                if (textAnalysis.isShort) rateValue += 2; // Less aggressive short response speed
+            }
+            
+            // 3. Contextual adjustments
             if (textAnalysis.isCorrection) rateValue -= 5;      // Slower for corrections
             else if (textAnalysis.isShort) rateValue += 4;      // Faster for short responses  
             else if (textAnalysis.isQuestion) rateValue += 2;   // Slightly faster for questions
             
-            // 3. Natural variation every 3 turns (avoid robot voice)
+            // 4. Natural variation every 3 turns (avoid robot voice)
             if (turnCount % 3 === 0 && !textAnalysis.isCorrection) {
                 rateValue += (Math.random() * 2 - 1); // ±1% micro-variation
             }
             
-            // 4. Safe range limits (expanded for C2)
+            // 5. Safe range limits (expanded for C2)
             const finalRate = Math.max(-15, Math.min(rateValue, 35));
             const rate = `${finalRate.toFixed(1)}%`;
             
-            // 5. Dynamic pitch (unchanged)
-            let pitch = (Math.random() < 0.3) ? vary("+0%", 2) : "+0%";
-            if (textAnalysis.isCorrection) pitch = "+3%";
+            // 6. Voice-specific pitch optimization
+            let pitch = "+0%";
+            if (voiceName === 'de-DE-ConradNeural') {
+                // Conrad Neural benefits from slight pitch variation
+                if (textAnalysis.isCorrection) pitch = "+2%"; // Less aggressive pitch for corrections
+                else if (textAnalysis.isQuestion) pitch = "+1%"; // Subtle question intonation
+                else if (Math.random() < 0.4) pitch = vary("+0%", 1.5); // More frequent but subtle variation
+            } else {
+                // Katja Neural (original configuration)
+                if (textAnalysis.isCorrection) pitch = "+3%";
+                else if (Math.random() < 0.3) pitch = vary("+0%", 2);
+            }
             
             return { rate, pitch };
         }
         
-        // Advanced pause calculation
-        function calculateBreakTime(punctuation, sentenceLength, cefrLevel) {
+        // Advanced pause calculation with voice-specific optimization
+        function calculateBreakTime(punctuation, sentenceLength, cefrLevel, voiceName = 'de-DE-KatjaNeural') {
             let baseTime;
             if (punctuation === '?') baseTime = 250;
             else if (punctuation === '.') baseTime = 120;
             else if (punctuation === ',') baseTime = 80;
             else return 0;
+            
+            // Voice-specific pause adjustments
+            if (voiceName === 'de-DE-ConradNeural') {
+                // Conrad Neural benefits from slightly longer pauses for naturalness
+                baseTime *= 1.2;
+            }
             
             const lengthFactor = 1 + Math.log10(sentenceLength + 1) / 4;
             const levelFactor = {
@@ -374,7 +397,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
         }
         
         // Text processor for emphasis and pauses
-        function processTextForSSML(text, cefrLevel) {
+        function processTextForSSML(text, cefrLevel, voiceName = 'de-DE-KatjaNeural') {
             let processed = text;
             
             // Process asterisk emphasis with improved regex
@@ -389,16 +412,29 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 
                 if (sentence) result.push(sentence);
                 if (punct) {
-                    const breakTime = calculateBreakTime(punct, sentence?.length || 0, cefrLevel);
+                    const breakTime = calculateBreakTime(punct, sentence?.length || 0, cefrLevel, voiceName);
                     result.push(`${punct}<break time="${breakTime}ms"/>`);
                 }
             }
             return result.join(' ');
         }
         
-        // SSML template builder (voice-agnostic)
+        // SSML template builder (voice-specific optimizations)
         function buildSSMLTemplate(processedText, prosody, voiceName) {
-            return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
+            // Conrad Neural needs specific optimizations for naturalness
+            if (voiceName === 'de-DE-ConradNeural') {
+                return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
+  <voice name="${voiceName}">
+    <mstts:express-as style="assistant" styledegree="0.9">
+      <prosody rate="${prosody.rate}" pitch="${prosody.pitch}" volume="+5%">
+        ${processedText}
+      </prosody>
+    </mstts:express-as>
+  </voice>
+</speak>`;
+            } else {
+                // Katja Neural (default configuration)
+                return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
   <voice name="${voiceName}">
     <mstts:express-as style="chat" styledegree="0.8">
       <prosody rate="${prosody.rate}" pitch="${prosody.pitch}">
@@ -407,6 +443,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
     </mstts:express-as>
   </voice>
 </speak>`;
+            }
         }
         
         // Enhanced SSML validation
@@ -484,11 +521,11 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 // 1. Analyze text patterns
                 const textAnalysis = analyzeText(text);
                 
-                // 2. Calculate prosody parameters
-                const prosody = calculateProsody(textAnalysis, cefrLevel);
+                // 2. Calculate prosody parameters with voice-specific optimization
+                const prosody = calculateProsody(textAnalysis, cefrLevel, 0, voiceName);
                 
                 // 3. Process text for SSML (emphasis + pauses)
-                const processedText = processTextForSSML(text, cefrLevel);
+                const processedText = processTextForSSML(text, cefrLevel, voiceName);
                 
                 // 4. Build SSML template with selected voice
                 const ssml = buildSSMLTemplate(processedText, prosody, voiceName);
