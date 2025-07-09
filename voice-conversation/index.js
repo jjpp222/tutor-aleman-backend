@@ -217,6 +217,21 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             { role: 'user', content: transcript.trim() }
         ];
 
+        // Extract voice preference from request (default to Katja for backward compatibility)
+        const selectedVoice = req.body.voiceId || 'de-DE-KatjaNeural';
+        const availableVoices = {
+            'de-DE-KatjaNeural': { name: 'Katja', gender: 'female', description: 'Amigable y educativa' },
+            'de-DE-ConradNeural': { name: 'Conrad', gender: 'male', description: 'Profesional y claro' }
+        };
+        
+        // Validate voice selection
+        if (!availableVoices[selectedVoice]) {
+            context.log(`Invalid voice selected: ${selectedVoice}, falling back to Katja`);
+            selectedVoice = 'de-DE-KatjaNeural';
+        }
+        
+        context.log(`Selected voice: ${selectedVoice} (${availableVoices[selectedVoice].name})`);
+
         // STEP 1: Call OpenAI for German response with retry system
         context.log('Step 1: Calling OpenAI API with retry protection...');
         
@@ -371,10 +386,10 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             return result.join(' ');
         }
         
-        // SSML template builder
-        function buildSSMLTemplate(processedText, prosody) {
+        // SSML template builder (voice-agnostic)
+        function buildSSMLTemplate(processedText, prosody, voiceName) {
             return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
-  <voice name="de-DE-KatjaNeural">
+  <voice name="${voiceName}">
     <mstts:express-as style="chat" styledegree="0.8">
       <prosody rate="${prosody.rate}" pitch="${prosody.pitch}">
         ${processedText}
@@ -411,9 +426,9 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             }
         }
 
-        // Check TTS cache first
+        // Check TTS cache first (voice-specific caching)
         const textHash = CacheService.hashText(cleanTextResponse);
-        let cachedAudio = CacheService.getTTSAudio(textHash, 'de-DE-KatjaNeural', userCEFRLevel);
+        let cachedAudio = CacheService.getTTSAudio(textHash, selectedVoice, userCEFRLevel);
         
         if (cachedAudio) {
             context.log(`TTS cache hit for hash: ${textHash}`);
@@ -426,7 +441,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                     germanResponse: cleanTextResponse,
                     audioData: cachedAudio,
                     transcript: transcript,
-                    voiceUsed: 'de-DE-KatjaNeural',
+                    voiceUsed: selectedVoice,
                     sessionId: `voice_${Date.now()}`,
                     timestamp: new Date().toISOString(),
                     pipeline: 'GPT-4o + CEFR-Adaptive SSML + Cached TTS',
@@ -450,11 +465,11 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             return;
         }
         
-        // Generate natural SSML with user's confirmed CEFR level  
-        const ssml = generateNaturalSSML(cleanTextResponse, userCEFRLevel);
+        // Generate natural SSML with user's confirmed CEFR level and selected voice
+        const ssml = generateNaturalSSML(cleanTextResponse, userCEFRLevel, selectedVoice);
 
         // Main SSML generator (refactored with modules)
-        function generateNaturalSSML(text, cefrLevel = 'B1') {
+        function generateNaturalSSML(text, cefrLevel = 'B1', voiceName = 'de-DE-KatjaNeural') {
             try {
                 // 1. Analyze text patterns
                 const textAnalysis = analyzeText(text);
@@ -465,30 +480,30 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 // 3. Process text for SSML (emphasis + pauses)
                 const processedText = processTextForSSML(text, cefrLevel);
                 
-                // 4. Build SSML template
-                const ssml = buildSSMLTemplate(processedText, prosody);
+                // 4. Build SSML template with selected voice
+                const ssml = buildSSMLTemplate(processedText, prosody, voiceName);
                 
                 // 5. Validate SSML
                 if (!validateSSML(ssml)) {
                     context.log('SSML validation failed, using fallback');
-                    return generateMinimalSSML(text);
+                    return generateMinimalSSML(text, voiceName);
                 }
                 
-                context.log(`Generated CEFR-adapted SSML - Level: ${cefrLevel}, Rate: ${prosody.rate}, Pitch: ${prosody.pitch}, Analysis: ${JSON.stringify(textAnalysis)}`);
+                context.log(`Generated CEFR-adapted SSML - Voice: ${voiceName}, Level: ${cefrLevel}, Rate: ${prosody.rate}, Pitch: ${prosody.pitch}, Analysis: ${JSON.stringify(textAnalysis)}`);
                 return ssml;
                 
             } catch (error) {
                 context.log(`Modular SSML generation failed: ${error.message}, using minimal fallback`);
-                return generateMinimalSSML(text);
+                return generateMinimalSSML(text, voiceName);
             }
         }
 
         // Minimal fallback SSML (ultra-safe)
-        function generateMinimalSSML(response) {
+        function generateMinimalSSML(response, voiceName = 'de-DE-KatjaNeural') {
             // Clean text of any problematic characters
             const cleanText = response.replace(/[<>&"']/g, '');
             return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts">
-  <voice name="de-DE-KatjaNeural">
+  <voice name="${voiceName}">
     <mstts:express-as style="chat" styledegree="0.8">
       <prosody rate="+0%" pitch="+0%">
         ${cleanText}
@@ -530,9 +545,9 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 const base64Audio = Buffer.from(audioBuffer).toString('base64');
                 context.log(`TTS audio generated successfully, size: ${audioBuffer.byteLength} bytes`);
                 
-                // Cache the generated audio
-                CacheService.setTTSAudio(textHash, 'de-DE-KatjaNeural', userCEFRLevel, base64Audio);
-                context.log(`TTS audio cached with hash: ${textHash}`);
+                // Cache the generated audio (voice-specific)
+                CacheService.setTTSAudio(textHash, selectedVoice, userCEFRLevel, base64Audio);
+                context.log(`TTS audio cached with hash: ${textHash} for voice: ${selectedVoice}`);
                 
                 return base64Audio;
             }, 2, 500); // Only 2 retries for TTS, longer delay
@@ -551,7 +566,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 germanResponse: cleanTextResponse,
                 audioData: audioData,
                 transcript: transcript,
-                voiceUsed: 'de-DE-KatjaNeural',
+                voiceUsed: selectedVoice,
                 sessionId: `voice_${Date.now()}`,
                 timestamp: new Date().toISOString(),
                 pipeline: 'GPT-4o + CEFR-Adaptive SSML + Katja TTS v2.0',
