@@ -25,10 +25,7 @@ jobs:
       - name: 'Login to Azure'
         uses: azure/login@v1
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
 
       - name: 'Set WEBSITE_RUN_FROM_PACKAGE to 1'
         run: az functionapp config appsettings set --name tutor-aleman-backend-v4 --resource-group TutorAleman-RG-v2 --settings WEBSITE_RUN_FROM_PACKAGE=1
