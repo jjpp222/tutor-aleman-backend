@@ -373,30 +373,45 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 if (textAnalysis.isCorrection) pitch = "+3%";
                 else if (Math.random() < 0.3) pitch = vary("+0%", 2);
             }
+
+            // 7. Volume calculation
+            let volumeValue = 0; // Default to +0%
+            if (voiceName === 'de-DE-KlausNeural') {
+                if (textAnalysis.isEmphasis) volumeValue += 3; // Slightly louder for emphasis
+                else if (textAnalysis.isQuestion) volumeValue += 1; // Slightly louder for questions
+            } else {
+                // Katja Neural
+                if (textAnalysis.isEmphasis) volumeValue += 4; // More pronounced for emphasis
+            }
+            const volume = `${volumeValue.toFixed(1)}%`;
             
-            return { rate, pitch };
+            return { rate, pitch, volume };
         }
         
         // Advanced pause calculation with voice-specific optimization
-        function calculateBreakTime(punctuation, sentenceLength, cefrLevel, voiceName = 'de-DE-KatjaNeural') {
-            let baseTime;
-            if (punctuation === '?') baseTime = 250;
-            else if (punctuation === '.') baseTime = 120;
-            else if (punctuation === ',') baseTime = 80;
-            else return 0;
-            
-            // Voice-specific pause adjustments
-            if (voiceName === 'de-DE-KlausNeural') {
-                // Klaus Neural has natural pacing, standard pause timing
-                baseTime *= 1.0; // No adjustment needed
+        function calculateBreakStrength(punctuation, sentenceLength, cefrLevel, voiceName = 'de-DE-KatjaNeural') {
+            let strength = 'none'; // Default
+
+            if (punctuation === '?') {
+                strength = 'strong';
+            } else if (punctuation === '.') {
+                strength = 'medium';
+            } else if (punctuation === ',') {
+                strength = 'weak';
+            }
+
+            // Optional: Adjust strength based on CEFR level for more natural flow
+            // For lower levels (A1, A2), slightly stronger breaks might be helpful for clarity.
+            // For higher levels (C1, C2), slightly weaker breaks for more fluent speech.
+            if (cefrLevel === 'A1' || cefrLevel === 'A2') {
+                if (strength === 'weak') strength = 'medium';
+                else if (strength === 'medium') strength = 'strong';
+            } else if (cefrLevel === 'C1' || cefrLevel === 'C2') {
+                if (strength === 'medium') strength = 'weak';
+                else if (strength === 'strong') strength = 'medium';
             }
             
-            const lengthFactor = 1 + Math.log10(sentenceLength + 1) / 4;
-            const levelFactor = {
-                'A1': 1.5, 'A2': 1.3, 'B1': 1.0, 'B2': 0.9, 'C1': 0.8, 'C2': 0.7
-            }[cefrLevel] || 1.0;
-            
-            return Math.round(baseTime * lengthFactor * levelFactor);
+            return strength;
         }
         
         // Text processor for emphasis and pauses
@@ -404,7 +419,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             let processed = text;
             
             // Process asterisk emphasis with improved regex
-            processed = processed.replace(/(?<!\\)\*(\p{L}[^*]{0,30})\*/gu, '<emphasis level="moderate">$1</emphasis>');
+            processed = processed.replace(/(?<!\\)\*(\p{L}[^*]{0,30})\*/gu, '<emphasis level="strong">$1</emphasis>');
             
             // Add adaptive pauses
             const sentences = processed.split(/([?,.])/);
@@ -415,8 +430,8 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 
                 if (sentence) result.push(sentence);
                 if (punct) {
-                    const breakTime = calculateBreakTime(punct, sentence?.length || 0, cefrLevel, voiceName);
-                    result.push(`${punct}<break time="${breakTime}ms"/>`);
+                    const breakStrength = calculateBreakStrength(punct, sentence?.length || 0, cefrLevel, voiceName);
+                    result.push(`${punct}<mstts:breakstrength>${breakStrength}</mstts:breakstrength>`);
                 }
             }
             return result.join(' ');
