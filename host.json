@@ -3,7 +3,7 @@
   "functionTimeout": "00:00:30",
   "cors": {
     "allowedOrigins": ["*"],
-    "allowedMethods": ["GET", "POST", "OPTIONS"],
+    "allowedMethods": ["GET", "POST", "PUT", "OPTIONS"],
     "allowedHeaders": ["Content-Type", "Authorization", "X-Requested-With"],
     "maxAge": 86400
   },
