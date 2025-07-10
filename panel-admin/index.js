@@ -67,8 +67,27 @@ module.exports = async function (context, req) {
             }
             
             // Update the request status using existing method
+            let newStatus;
+            if (action === 'approve') {
+                newStatus = 'approved';
+            } else if (action === 'reject') {
+                newStatus = 'rejected';
+            } else if (action === 'pending') {
+                newStatus = 'pending';
+            } else {
+                context.res = {
+                    status: 400,
+                    headers: corsHeaders,
+                    body: {
+                        success: false,
+                        error: 'Invalid action. Must be approve, reject, or pending'
+                    }
+                };
+                return;
+            }
+            
             const updateData = {
-                status: action === 'approve' ? 'approved' : 'rejected',
+                status: newStatus,
                 adminNotes: adminNotes || ''
             };
             
@@ -83,14 +102,23 @@ module.exports = async function (context, req) {
                 try {
                     await DatabaseService.updateUserStatus(
                         updatedRequest.userId, 
-                        action === 'approve' ? 'approved' : 'rejected',
+                        newStatus,
                         'admin-system'
                     );
-                    context.log(`Panel Admin - User status updated: ${updatedRequest.userId} -> ${action}d`);
+                    context.log(`Panel Admin - User status updated: ${updatedRequest.userId} -> ${newStatus}`);
                 } catch (userUpdateError) {
                     context.log.error('Panel Admin - Failed to update user status:', userUpdateError.message);
                     // Continue anyway, the request was processed
                 }
+            }
+            
+            let successMessage;
+            if (action === 'approve') {
+                successMessage = 'Request approved successfully. User can now login.';
+            } else if (action === 'reject') {
+                successMessage = 'Request rejected successfully. User cannot login.';
+            } else if (action === 'pending') {
+                successMessage = 'Request reverted to pending successfully. User access suspended pending review.';
             }
             
             context.res = {
@@ -98,7 +126,7 @@ module.exports = async function (context, req) {
                 headers: corsHeaders,
                 body: {
                     success: true,
-                    message: `Request ${action}d successfully. User can now login.`
+                    message: successMessage
                 }
             };
         } else {
