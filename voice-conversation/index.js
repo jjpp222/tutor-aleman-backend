@@ -332,8 +332,8 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
                 'A2': -3,   // ~117 wpm  
                 'B1': 10,   // ~133 wpm
                 'B2': 18,   // ~143 wpm
-                'C1': 25,   // ~152 wpm
-                'C2': 32    // ~162 wpm (NEW!)
+                'C1': 20,   // ~145 wpm (Reduced for more natural pace)
+                'C2': 25    // ~152 wpm (Reduced for more natural pace)
             };
             
             // 1. Base rate according to CEFR level
