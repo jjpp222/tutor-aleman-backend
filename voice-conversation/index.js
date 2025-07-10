@@ -234,7 +234,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
         const selectedVoice = req.body.voiceId || 'de-DE-KatjaNeural';
         const availableVoices = {
             'de-DE-KatjaNeural': { name: 'Katja', gender: 'female', description: 'Amigable y educativa' },
-            'de-DE-ConradNeural': { name: 'Conrad', gender: 'male', description: 'Profesional y claro' }
+            'de-DE-KlausNeural': { name: 'Klaus', gender: 'male', description: 'Natural y cálido' }
         };
         
         // Validate voice selection
@@ -340,11 +340,11 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             let rateValue = baseRates[cefrLevel] ?? 10; // Default to B1 if unknown
             
             // 2. Voice-specific adjustments for naturalness
-            if (voiceName === 'de-DE-ConradNeural') {
-                // Conrad Neural needs slightly different pacing for naturalness
-                rateValue -= 2; // Slightly slower base rate
-                if (textAnalysis.isQuestion) rateValue += 1; // Less aggressive question speed
-                if (textAnalysis.isShort) rateValue += 2; // Less aggressive short response speed
+            if (voiceName === 'de-DE-KlausNeural') {
+                // Klaus Neural has naturally good pacing, minimal adjustments needed
+                rateValue += 1; // Slightly faster base rate for warmth
+                if (textAnalysis.isQuestion) rateValue += 1; // Natural question intonation
+                if (textAnalysis.isShort) rateValue += 2; // Responsive short answers
             }
             
             // 3. Contextual adjustments
@@ -363,11 +363,11 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             
             // 6. Voice-specific pitch optimization
             let pitch = "+0%";
-            if (voiceName === 'de-DE-ConradNeural') {
-                // Conrad Neural benefits from slight pitch variation
-                if (textAnalysis.isCorrection) pitch = "+2%"; // Less aggressive pitch for corrections
-                else if (textAnalysis.isQuestion) pitch = "+1%"; // Subtle question intonation
-                else if (Math.random() < 0.4) pitch = vary("+0%", 1.5); // More frequent but subtle variation
+            if (voiceName === 'de-DE-KlausNeural') {
+                // Klaus Neural has natural warmth, minimal pitch adjustments
+                if (textAnalysis.isCorrection) pitch = "+1%"; // Gentle correction tone
+                else if (textAnalysis.isQuestion) pitch = "+2%"; // Warm question intonation
+                else if (Math.random() < 0.3) pitch = vary("+0%", 1); // Subtle natural variation
             } else {
                 // Katja Neural (original configuration)
                 if (textAnalysis.isCorrection) pitch = "+3%";
@@ -386,9 +386,9 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             else return 0;
             
             // Voice-specific pause adjustments
-            if (voiceName === 'de-DE-ConradNeural') {
-                // Conrad Neural benefits from slightly longer pauses for naturalness
-                baseTime *= 1.2;
+            if (voiceName === 'de-DE-KlausNeural') {
+                // Klaus Neural has natural pacing, standard pause timing
+                baseTime *= 1.0; // No adjustment needed
             }
             
             const lengthFactor = 1 + Math.log10(sentenceLength + 1) / 4;
@@ -424,12 +424,12 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
         
         // SSML template builder (voice-specific optimizations)
         function buildSSMLTemplate(processedText, prosody, voiceName) {
-            // Conrad Neural needs specific optimizations for naturalness
-            if (voiceName === 'de-DE-ConradNeural') {
+            // Klaus Neural optimized for warm, natural conversation
+            if (voiceName === 'de-DE-KlausNeural') {
                 return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
   <voice name="${voiceName}">
-    <mstts:express-as style="assistant" styledegree="0.9">
-      <prosody rate="${prosody.rate}" pitch="${prosody.pitch}" volume="+5%">
+    <mstts:express-as style="friendly" styledegree="0.8">
+      <prosody rate="${prosody.rate}" pitch="${prosody.pitch}" volume="+3%">
         ${processedText}
       </prosody>
     </mstts:express-as>
