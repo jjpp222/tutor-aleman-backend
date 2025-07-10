@@ -1,6 +1,6 @@
 {
   "bindings": [
-    { "authLevel": "anonymous", "type": "httpTrigger", "name": "req", "methods": ["PUT"], "route": "refresh-level" },
+    { "authLevel": "anonymous", "type": "httpTrigger", "name": "req", "methods": ["put"], "route": "refresh-level" },
     { "type": "http", "direction": "out", "name": "res" }
   ]
 }
