@@ -25,15 +25,12 @@ jobs:
       
 
       - name: Deploy to Azure Functions
-        uses: Azure/functions-action@v1.5.2
+        uses: Azure/functions-action@v1
         with:
           app-name: 'tutor-aleman-backend-v4'
           slot-name: 'production'
           package: '.'
-          
           publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
-          scm-do-build-during-deployment: false
-          enable-oryx-build: false
       
       - name: Verify Backend Deployment
         run: |
