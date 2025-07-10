@@ -428,7 +428,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             if (voiceName === 'de-DE-KlausNeural') {
                 return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
   <voice name="${voiceName}">
-    <mstts:express-as style="friendly" styledegree="0.8">
+    <mstts:express-as style="chat" styledegree="0.8">
       <prosody rate="${prosody.rate}" pitch="${prosody.pitch}" volume="+3%">
         ${processedText}
       </prosody>
