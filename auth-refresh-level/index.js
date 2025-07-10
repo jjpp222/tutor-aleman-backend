@@ -6,9 +6,17 @@ module.exports = async (context, req) => {
   const decoded = TokenService.verify(token);
   if (!decoded) return context.res = { status:401 };
 
-  const { level } = req.body || {};
+  const { level, email } = req.body || {};
   if (!['A1','A2','B1','B2','C1','C2'].includes(level)) return context.res = { status:400 };
 
+  // Si es admin y se proporciona email, actualizar el nivel de otro usuario
+  if (decoded.role === 'admin' && email) {
+    await DatabaseService.updateUserCEFRLevelByEmail(email, level, 'admin_update');
+    context.res = { status:200, body:{ message: 'Nivel actualizado exitosamente' } };
+    return;
+  }
+
+  // Si es usuario normal, actualizar su propio nivel
   await DatabaseService.updateUserCEFRLevel(decoded.userId, level, 'manual');
   const newToken = TokenService.generate({ ...decoded, cefr: level });
 

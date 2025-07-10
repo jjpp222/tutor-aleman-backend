@@ -172,6 +172,42 @@ class DatabaseService {
         return user ? (user.cefrLevel || user.germanLevel || 'B1') : 'B1';
     }
     
+    static async updateUserCEFRLevelByEmail(email, newLevel, source = 'admin_update') {
+        const container = database.container(config.containers.users);
+        const user = await this.getUserByEmail(email);
+        
+        if (!user) {
+            throw new Error('Usuario no encontrado');
+        }
+        
+        // Initialize levelHistory if it doesn't exist
+        if (!user.levelHistory) {
+            user.levelHistory = [];
+        }
+        
+        // Add entry to history if level is actually changing
+        if (user.cefrLevel !== newLevel) {
+            user.levelHistory.push({
+                level: newLevel,
+                date: new Date().toISOString(),
+                source: source,
+                previousLevel: user.cefrLevel || user.germanLevel
+            });
+            
+            // Keep only last 10 entries to avoid bloating
+            if (user.levelHistory.length > 10) {
+                user.levelHistory = user.levelHistory.slice(-10);
+            }
+        }
+        
+        // Update current level
+        user.cefrLevel = newLevel;
+        user.updatedAt = new Date().toISOString();
+        
+        const { resource } = await container.item(user.id, user.id).replace(user);
+        return resource;
+    }
+    
     static async initializeUserCEFRLevel(userId, placementLevel) {
         const container = database.container(config.containers.users);
         const { resource: user } = await container.item(userId, userId).read();
