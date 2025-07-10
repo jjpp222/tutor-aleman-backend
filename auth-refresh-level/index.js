@@ -6,7 +6,9 @@ module.exports = async (context, req) => {
     context.log('🔄 === REFRESH-LEVEL ENDPOINT CALLED ===');
     context.log('🌐 Method:', req.method);
     context.log('🔗 URL:', req.url);
-    context.log('📋 Headers:', JSON.stringify(req.headers));
+    // Reducir verbosidad - solo headers relevantes
+    context.log('📋 Content-Type:', req.headers['content-type']);
+    context.log('📋 Authorization:', req.headers.authorization ? 'Present' : 'Missing');
     context.log('📤 Body:', JSON.stringify(req.body));
     
     // Validar token
@@ -37,13 +39,21 @@ module.exports = async (context, req) => {
     context.log('👤 Decoded user role:', decoded.role);
     
     if (!level) {
-      context.log('❌ Level parameter missing');
+      context.log.error('❌ Level parameter missing');
       return context.res = { status: 400, body: { error: 'Parámetro level requerido' } };
     }
     
     if (!['A1','A2','B1','B2','C1','C2'].includes(level)) {
-      context.log('❌ Invalid level:', level);
+      context.log.error('❌ Invalid level:', level);
       return context.res = { status: 400, body: { error: 'Nivel inválido. Debe ser A1, A2, B1, B2, C1 o C2' } };
+    }
+    
+    // Validar email para admin requests
+    if (decoded.role === 'admin') {
+      if (!email || typeof email !== 'string' || email.trim() === '') {
+        context.log.error('❌ Email missing or invalid for admin request');
+        return context.res = { status: 400, body: { error: 'Parámetro email requerido para actualización de admin' } };
+      }
     }
 
     // Si es admin y se proporciona email, actualizar el nivel de otro usuario
@@ -52,9 +62,9 @@ module.exports = async (context, req) => {
       
       try {
         // Buscar usuario por email y actualizar
-        const user = await DatabaseService.getUserByEmail(email);
+        const user = await DatabaseService.getUserByEmail(email.trim());
         if (!user) {
-          context.log('❌ User not found in database:', email);
+          context.log.error('❌ User not found in database:', email);
           return context.res = { status: 404, body: { error: 'Usuario no encontrado' } };
         }
         
@@ -85,7 +95,8 @@ module.exports = async (context, req) => {
         };
         
       } catch (dbError) {
-        context.log('💥 Database error during admin update:', dbError.message);
+        context.log.error('💥 Database error during admin update:', dbError.message);
+        context.log.error('💥 DB Error stack:', dbError.stack);
         return context.res = { status: 500, body: { error: 'Error en base de datos: ' + dbError.message } };
       }
     }
@@ -95,7 +106,7 @@ module.exports = async (context, req) => {
       context.log('👤 Regular user updating own level');
       
       if (email && email !== decoded.email) {
-        context.log('❌ Regular user trying to update another user level');
+        context.log.error('❌ Regular user trying to update another user level');
         return context.res = { status: 403, body: { error: 'No tienes permisos para actualizar el nivel de otro usuario' } };
       }
       
@@ -107,13 +118,14 @@ module.exports = async (context, req) => {
         return context.res = { status: 200, body: { token: newToken } };
         
       } catch (dbError) {
-        context.log('💥 Database error during own update:', dbError.message);
+        context.log.error('💥 Database error during own update:', dbError.message);
+        context.log.error('💥 DB Error stack:', dbError.stack);
         return context.res = { status: 500, body: { error: 'Error en base de datos: ' + dbError.message } };
       }
     }
 
     // Si llegamos aquí, algo no está bien configurado
-    context.log('❌ Unexpected flow - admin without email or missing role');
+    context.log.error('❌ Unexpected flow - admin without email or missing role');
     return context.res = { status: 400, body: { error: 'Parámetros inválidos para la operación' } };
     
   } catch (error) {
