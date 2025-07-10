@@ -421,20 +421,21 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
             // Process asterisk emphasis with improved regex
             processed = processed.replace(/(?<!\\)\*(\p{L}[^*]{0,30})\*/gu, '<emphasis level="strong">$1</emphasis>');
             
-            // Add adaptive pauses
-            const sentences = processed.split(/([?,.])/);
-            let result = [];
-            for (let i = 0; i < sentences.length; i += 2) {
-                const sentence = sentences[i]?.trim();
-                const punct = sentences[i + 1];
-                
-                if (sentence) result.push(sentence);
-                if (punct) {
-                    const breakStrength = calculateBreakStrength(punct, sentence?.length || 0, cefrLevel, voiceName);
-                    result.push(`${punct}<mstts:breakstrength>${breakStrength}</mstts:breakstrength>`);
-                }
-            }
-            return result.join(' ');
+            // 1) Escape XML characters from the processed text
+            const esc = processed
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+            
+            // 2) Replace punctuation with breaks
+            const withBreaks = esc
+                // periods and end-of-sentence punctuation
+                .replace(/([.?!]+)\s*/g, `<break time="400ms"/>`)
+                // commas and small pauses
+                .replace(/(,)\s*/g, `<break time="200ms"/>`);
+
+            // 3) Return the processed text with breaks
+            return withBreaks.trim();
         }
         
         // SSML template builder (voice-specific optimizations)
