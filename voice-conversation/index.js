@@ -161,8 +161,8 @@ module.exports = async function (context, req) {
 Du bist eine erfahrene deutsche Sprachtrainerin für Konversationspraxis.
 Deine Mission: Sprechfertigkeiten und Selbstvertrauen der Lernenden durch motivierende, authentische Gespräche stärken.
 
-# —— SPRACHNIVEAU & ANPASSUNG ——
-Passe Wortschatz und Komplexität an das CEFR-Niveau des Lernenden an, das dir im System-Nachricht mitgeteilt wird.
+# —— SPRACHNIVEAU & ANAPTACIÓN ——
+Pase Wortschatz und Komplexität an das CEFR-Niveau des Lernenden an, das dir im System-Nachricht mitgeteilt wird.
 
 # —— GESPRÄCHSFÜHRUNG ——
 **Struktur deiner Antworten:**
@@ -181,9 +181,11 @@ Passe Wortschatz und Komplexität an das CEFR-Niveau des Lernenden an, das dir i
 **Reformulierungstechnik (Recast):**
 • Höre zu ohne zu unterbrechen
 • Reformuliere falsche Strukturen natürlich in korrekter Form: "Ach so, du meinst also..."
-• Maximal 1-2 Verbesserungspunkte pro Runde
-• IMMER zuerst loben, dann korrigieren: "Das hast du gut gesagt! Man könnte auch sagen..."
-• Nie "Das ist falsch" - immer positive Umformulierung
+• **Solo corrige errores significativos** que afecten la comprensión o la fluidez.
+• **Prioriza la fluidez y la confianza** del alumno sobre la corrección gramatical perfecta.
+• Máximo 1-2 puntos de mejora por turno, solo si son *realmente* necesarios.
+• IMMER primero loben, luego corregir: "Das hast du gut gesagt! Man könnte auch sagen..."
+• Nunca "Das ist falsch" - siempre reformulación positiva.
 
 # —— MOTIVATIONSSTRATEGIEN ——
 • **Ermutigung**: "Du sprichst schon sehr gut!", "Deine Aussprache wird immer besser!"
@@ -192,29 +194,26 @@ Passe Wortschatz und Komplexität an das CEFR-Niveau des Lernenden an, das dir i
 • **Wortschatzerweiterung**: "Das nennt man übrigens auch...", "Ein anderes Wort dafür ist..."
 
 # —— KRITISCH: PERFEKTE PUNTUIERUNG ——
-**ABSOLUT WICHTIG für natürliche Sprachsynthese:**
-• Verwende ALLE notwendigen Satzzeichen: Punkte, Kommas, Ausrufezeichen, Fragezeichen
-• Setze Kommas bei Aufzählungen: "Ich mag Kaffee, Tee, und Schokolade"
-• Verwende Kommas vor "aber", "oder", "und" bei Nebensätzen: "Das ist gut, aber es könnte besser sein"
-• Beende JEDEN Satz mit einem Punkt, Ausrufezeichen oder Fragezeichen
-• Bei direkter Rede: "Das ist interessant", sagte sie
-• Verwende Gedankenstriche für Pausen: "Das war – wie soll ich sagen – sehr überraschend"
-• NIEMALS Text ohne korrekte Interpunktion abgeben
+**ABSOLUT WICHTIG para naturalidad en la voz:**
+• Usa TODOS los signos de puntuación necesarios: puntos, comas, exclamaciones, interrogaciones.
+• Pon comas en enumeraciones: "Ich mag Kaffee, Tee, und Schokolade"
+• Pon comas antes de "aber", "oder", "und" en oraciones subordinadas: "Das ist gut, aber es könnte besser sein"
+• Termina CADA oración con un punto, exclamación o interrogación.
+• Para pausas naturales, usa guiones largos (—) o asteriscos (*) que serán convertidos a pausas SSML.
+• NUNCA entregues texto sin la puntuación correcta.
 
-# —— AUSGABEFORMAT ——
-**WICHTIG**: Antworte nur mit natürlichem Fließtext - KEIN XML oder SSML!
-• Verwende *Sternchen* um wichtige Wörter für spätere Betonung
-• Schreibe natürlich und authentisch mit PERFEKTER Interpunktion
-• Das Audio-System übernimmt die Sprachsynthese automatisch
-• NIEMALS abgeschnittene oder unvollständige Antworten - beende jeden Gedanken komplett!
+# —— FORMATO DE SALIDA ——
+**IMPORTANTE**: Responde solo con texto fluido y natural - ¡NO XML o SSML!
+• Usa *asteriscos* para palabras importantes que necesiten énfasis (serán convertidos a SSML).
+• Escribe de forma natural y auténtica con PUNTUACIÓN PERFECTA.
+• El sistema de audio se encarga de la síntesis de voz automáticamente.
+• NUNCA respuestas cortadas o incompletas - ¡termina cada pensamiento por completo!
 
-# —— KONVERSATIONSTHEMEN ——
-Alltag, Hobbys, Reisen, deutsche Kultur, Arbeit, Studium, Zukunftspläne.
+# —— TEMAS DE CONVERSACIÓN ——
+Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros.
 
-# —— BEISPIEL-AUSGABE ——
-Hallo! Schön, dass wir uns sprechen. Du hast das sehr *gut* ausgesprochen! Erzähl mir doch, was hast du heute schon gemacht?
-
-Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selbstvertrauen, nicht auf Perfektion.`;
+# —— EJEMPLO DE SALIDA ——
+¡Hola! Qué bien que hablemos. Has pronunciado esto muy *bien*! Cuéntame, ¿qué has hecho hoy?`;
 
         // Create user profile message for consistent CEFR level awareness
         const profileMessage = {
@@ -294,7 +293,7 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
         let cleanTextResponse = rawResponse
             .replace(/^<<(A1|A2|B1|B2|C1|C2)>>/, '') // Remove CEFR tag
             .replace(/<[^>]*>/g, '') // Remove any other XML tags
-            .replace(/[^a-zA-Z0-9äöüÄÖÜß\s.,?!:;'*-]/g, '') // Keep asterisks for emphasis
+            .replace(/[^a-zA-Z0-9äöüÄÖÜß\s.,?!:;]/g, '') // Remove special chars, but keep punctuation for later processing
             .replace(/\s+/g, ' ') // Replace multiple spaces
             .trim();
 
@@ -416,26 +415,27 @@ Sei geduldig, authentisch und motivierend. Fokus liegt auf Sprechpraxis und Selb
         
         // Text processor for emphasis and pauses
         function processTextForSSML(text, cefrLevel, voiceName = 'de-DE-KatjaNeural') {
-            let processed = text;
-            
-            // Process asterisk emphasis with improved regex
-            processed = processed.replace(/(?<!\\)\*(\p{L}[^*]{0,30})\*/gu, '<emphasis level="strong">$1</emphasis>');
-            
-            // 1) Escape XML characters from the processed text
-            const esc = processed
+            // 1) Escape XML characters from the raw text
+            let processed = text
                 .replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
                 .replace(/>/g, "&gt;");
             
-            // 2) Replace punctuation with breaks
-            const withBreaks = esc
+            // 2) Convert Markdown *emphasis* to SSML <emphasis>
+            // Use 'strong' emphasis as requested
+            processed = processed.replace(/\*(.+?)\*/g, (_, inner) =>
+                `<emphasis level="strong">${inner.trim()}</emphasis>`
+            );
+
+            // 3) Replace punctuation with breaks
+            processed = processed
                 // periods and end-of-sentence punctuation
                 .replace(/([.?!]+)\s*/g, `<break time="400ms"/>`)
                 // commas and small pauses
                 .replace(/(,)\s*/g, `<break time="200ms"/>`);
 
-            // 3) Return the processed text with breaks
-            return withBreaks.trim();
+            // 4) Return the processed text with breaks
+            return processed.trim();
         }
         
         // SSML template builder (voice-specific optimizations)
