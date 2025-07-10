@@ -20,10 +20,17 @@ module.exports = async function (context, req) {
         }
 
         if (req.method === 'GET') {
-            context.log('Panel Admin - Fetching access requests...');
+            context.log('Panel Admin - Fetching access requests with current user levels...');
             
             const requests = await DatabaseService.getAllAccessRequests();
             context.log(`Panel Admin - Found ${requests.length} access requests`);
+            
+            // Get current user levels from Users table
+            const users = await DatabaseService.getAllUsers();
+            const userLevelsMap = {};
+            users.forEach(user => {
+                userLevelsMap[user.email] = user.cefrLevel || user.germanLevel;
+            });
             
             context.res = {
                 status: 200,
@@ -36,7 +43,7 @@ module.exports = async function (context, req) {
                         email: request.email,
                         name: request.name,
                         surname: request.surname,
-                        germanLevel: request.germanLevel,
+                        germanLevel: userLevelsMap[request.email] || request.germanLevel,
                         motivation: request.motivation,
                         status: request.status,
                         createdAt: request.createdAt
