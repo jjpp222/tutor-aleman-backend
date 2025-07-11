@@ -415,7 +415,7 @@ async function getMixedAudioUrl(context, req, corsHeaders) {
     try {
         // Get session from Cosmos DB
         const querySpec = {
-            query: 'SELECT * FROM c WHERE c.sessionId = @sessionId',
+            query: 'SELECT * FROM c WHERE c.id = @sessionId',
             parameters: [
                 { name: '@sessionId', value: sessionId }
             ]
