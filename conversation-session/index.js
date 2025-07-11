@@ -12,8 +12,8 @@ const conversationsContainer = 'conversations';
 const cosmosEndpoint = process.env.COSMOS_DB_ENDPOINT;
 const cosmosKey = process.env.COSMOS_DB_KEY;
 const cosmosClient = new CosmosClient({ endpoint: cosmosEndpoint, key: cosmosKey });
-const database = cosmosClient.database('TutorAleman');
-const sessionsContainer = database.container('ConversationSessions');
+const database = cosmosClient.database('TutorAlemanDB');
+const sessionsContainer = database.container('Sessions');
 
 module.exports = async function (context, req) {
     context.log('Conversation Session Management Function');
