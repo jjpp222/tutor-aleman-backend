@@ -2,7 +2,6 @@ const { validateJWT } = require('../shared/auth');
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { CosmosClient } = require('@azure/cosmos');
 const { v4: uuidv4 } = require('uuid');
-const multiparty = require('multiparty');
 const fs = require('fs');
 
 // Configuración de Azure Storage
@@ -284,27 +283,25 @@ async function appendBotAudio(context, req, corsHeaders, userId) {
     try {
         context.log('Appending bot audio for user:', userId);
         
-        // Parse multipart form data
-        const form = new multiparty.Form();
-        const formData = await new Promise((resolve, reject) => {
-            form.parse(req, (err, fields, files) => {
-                if (err) reject(err);
-                else resolve({ fields, files });
-            });
-        });
+        // Parse form data from Azure Functions request
+        const sessionId = req.body.sessionId;
+        const botText = req.body.botText;
+        const timestamp = req.body.timestamp;
+        const audioBlob = req.body.audio; // Should be base64 or buffer
         
-        const sessionId = formData.fields.sessionId?.[0];
-        const botText = formData.fields.botText?.[0];
-        const timestamp = formData.fields.timestamp?.[0];
-        const audioFile = formData.files.audio?.[0];
-        
-        if (!sessionId || !botText || !audioFile) {
+        if (!sessionId || !botText || !audioBlob) {
             throw new Error('Missing required fields: sessionId, botText, or audio');
         }
         
-        // Read file data for multiparty
-        const fs = require('fs');
-        const fileData = fs.readFileSync(audioFile.path);
+        // Convert audio data to buffer
+        let fileData;
+        if (typeof audioBlob === 'string') {
+            // Base64 string
+            fileData = Buffer.from(audioBlob, 'base64');
+        } else {
+            // Already a buffer
+            fileData = audioBlob;
+        }
         
         context.log(`Bot audio data - Session: ${sessionId}, Text length: ${botText.length}, Audio size: ${fileData.length}`);
         
