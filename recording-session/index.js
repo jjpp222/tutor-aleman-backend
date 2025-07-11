@@ -261,7 +261,7 @@ async function endSession(context, req, corsHeaders, userId) {
     session.transcriptUrl = `${userId}/${sessionId}/transcript.json`;
 
     // Update session in Cosmos DB
-    await sessionsContainer.item(sessionId, userId).replace(session);
+    await sessionsContainer.item(sessionId, sessionId).replace(session);
 
     context.res = {
         status: 200,
