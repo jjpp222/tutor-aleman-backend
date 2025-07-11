@@ -229,14 +229,17 @@ async function endSession(context, req, corsHeaders, userId) {
         throw new Error('Missing required field: sessionId');
     }
 
-    context.log(`Ending session: ${sessionId}`);
+    context.log(`Ending session: ${sessionId} for userId: ${userId}`);
 
     // Get session from Cosmos DB
     const { resource: session } = await sessionsContainer.item(sessionId, userId).read();
-    
+
     if (!session) {
+        context.log.error(`Session not found for sessionId: ${sessionId} and userId: ${userId}`);
         throw new Error('Session not found');
     }
+
+    context.log(`Found session with studentId: ${session.studentId}`);
 
     // Calculate duration
     const startTime = new Date(session.startedUtc);
