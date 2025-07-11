@@ -2,6 +2,7 @@ const { validateJWT } = require('../shared/auth');
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { CosmosClient } = require('@azure/cosmos');
 const archiver = require('archiver');
+const { DatabaseService } = require('../shared/database');
 
 // Configuración de Azure Storage
 const storageConnectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
@@ -113,18 +114,34 @@ module.exports = async function (context, req) {
 // === ADMIN FUNCTIONS ===
 
 async function listStudentConversations(context, req, corsHeaders) {
-    const studentId = req.query.studentId;
+    const studentIdentifier = req.query.studentId;
     
-    if (!studentId) {
+    if (!studentIdentifier) {
         throw new Error('Missing studentId parameter');
     }
 
-    context.log(`Admin listing conversations for student: ${studentId}`);
+    context.log(`Admin listing conversations for student: ${studentIdentifier}`);
+
+    let actualUserId;
+    
+    // Check if the studentIdentifier is an email or userId
+    if (studentIdentifier.includes('@')) {
+        // It's an email, get the userId from the database
+        const user = await DatabaseService.getUserByEmail(studentIdentifier);
+        if (!user) {
+            throw new Error(`User not found with email: ${studentIdentifier}`);
+        }
+        actualUserId = user.id;
+        context.log(`Resolved email ${studentIdentifier} to userId: ${actualUserId}`);
+    } else {
+        // It's already a userId
+        actualUserId = studentIdentifier;
+    }
 
     const querySpec = {
         query: "SELECT * FROM c WHERE c.studentId = @studentId ORDER BY c.startedUtc DESC",
         parameters: [
-            { name: "@studentId", value: studentId }
+            { name: "@studentId", value: actualUserId }
         ]
     };
 
@@ -155,7 +172,8 @@ async function listStudentConversations(context, req, corsHeaders) {
         headers: corsHeaders,
         body: {
             success: true,
-            studentId: studentId,
+            studentId: studentIdentifier,
+            resolvedUserId: actualUserId,
             sessions: formattedSessions,
             total: formattedSessions.length,
             summary: {
