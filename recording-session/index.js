@@ -73,6 +73,8 @@ module.exports = async function (context, req) {
             case 'POST':
                 if (segments.includes('start')) {
                     await startSession(context, req, corsHeaders, userId, userLevel);
+                } else if (segments.includes('append-bot-audio')) {
+                    await appendBotAudio(context, req, corsHeaders, userId);
                 } else if (segments.includes('append')) {
                     await appendTurn(context, req, corsHeaders, userId);
                 } else if (segments.includes('end')) {
@@ -209,7 +211,7 @@ async function appendTurn(context, req, corsHeaders, userId) {
     }
 
     // Update session in Cosmos DB
-    await sessionsContainer.item(sessionId, userId).replace(session);
+    await sessionsContainer.item(sessionId, sessionId).replace(session);
 
     context.res = {
         status: 200,
@@ -274,6 +276,80 @@ async function endSession(context, req, corsHeaders, userId) {
             message: 'Session ended successfully'
         }
     };
+}
+
+async function appendBotAudio(context, req, corsHeaders, userId) {
+    try {
+        context.log('Appending bot audio for user:', userId);
+        
+        // Parse form data from request
+        const sessionId = req.body.sessionId;
+        const botText = req.body.botText;
+        const timestamp = req.body.timestamp;
+        const audioFile = req.body.audio;
+        
+        if (!sessionId || !botText || !audioFile) {
+            throw new Error('Missing required fields: sessionId, botText, or audio');
+        }
+        
+        context.log(`Bot audio data - Session: ${sessionId}, Text length: ${botText.length}, Audio size: ${audioFile.length}`);
+        
+        // Verify session exists and belongs to user
+        const { resource: session } = await sessionsContainer.item(sessionId, userId).read();
+        if (!session) {
+            throw new Error('Session not found or access denied');
+        }
+        
+        // Create audio file path
+        const audioPath = `${userId}/${sessionId}/session_bot.mp3`;
+        
+        // Upload audio to Azure Blob Storage
+        const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
+        const blobClient = containerClient.getBlockBlobClient(audioPath);
+        
+        // Upload the audio file
+        await blobClient.upload(audioFile, audioFile.length, {
+            blobHTTPHeaders: {
+                blobContentType: 'audio/mpeg'
+            }
+        });
+        
+        context.log(`Bot audio uploaded to: ${audioPath}`);
+        
+        // Update session metadata
+        const updatedSession = {
+            ...session,
+            audioUrls: {
+                ...session.audioUrls,
+                bot: audioPath
+            },
+            lastUpdated: new Date().toISOString()
+        };
+        
+        await sessionsContainer.item(sessionId, userId).replace(updatedSession);
+        
+        context.res = {
+            status: 200,
+            headers: corsHeaders,
+            body: {
+                success: true,
+                message: 'Bot audio saved successfully',
+                audioPath: audioPath
+            }
+        };
+        
+    } catch (error) {
+        context.log.error('Error appending bot audio:', error);
+        
+        context.res = {
+            status: 500,
+            headers: corsHeaders,
+            body: {
+                success: false,
+                error: error.message || 'Failed to save bot audio'
+            }
+        };
+    }
 }
 
 async function listSessions(context, req, corsHeaders, userId) {
