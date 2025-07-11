@@ -209,6 +209,17 @@ Pase Wortschatz und Komplexität an das CEFR-Niveau des Lernenden an, das dir im
 • El sistema de audio se encarga de la síntesis de voz automáticamente.
 • NUNCA respuestas cortadas o incompletas - ¡termina cada pensamiento por completo!
 
+# —— VOICE TRANSITION HANDLING ——
+**IMPORTANTE: Manejo de cambios de voz/persona:**
+• Si recibes un mensaje [VOICE_TRANSITION], significa que la voz ha cambiado
+• Debes presentarte brevemente como la nueva persona (Klaus/Katja)
+• Continúa la conversación de forma natural y fluida
+• Mantén el contexto de la conversación anterior
+• Usa tu personalidad única:
+  - Klaus: Masculino, cálido, natural, ligeramente más directo
+  - Katja: Femenina, amigable, pedagógica, más detallada en explicaciones
+• Ejemplo: "Hola! Ich bin Klaus. Ich übernehme jetzt das Gespräch. Was hast du gerade gesagt?"
+
 # —— TEMAS DE CONVERSACIÓN ——
 Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros.
 
@@ -222,10 +233,27 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             content: `CEFR=${userCEFRLevel}`
         };
 
-        const messages = [
+        // Build messages array with voice transition support
+        const baseMessages = [
             { role: 'system', content: prompt },
             profileMessage, // ← NUEVO: Always inject user's CEFR level
-            ...(conversationHistory || []),
+            ...(conversationHistory || [])
+        ];
+        
+        // Insert voice transition message if voice has changed
+        if (voiceChangeInfo.hasChanged) {
+            const transitionMessage = generateVoiceTransitionMessage(
+                selectedVoice, 
+                voiceChangeInfo.previousVoice, 
+                voiceChangeInfo.previousName
+            );
+            baseMessages.push(transitionMessage);
+            context.log(`Voice transition message added: ${availableVoices[selectedVoice]?.name} taking over from ${voiceChangeInfo.previousName}`);
+        }
+        
+        // Add current user message
+        const messages = [
+            ...baseMessages,
             { role: 'user', content: transcript.trim() }
         ];
 
@@ -243,7 +271,97 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
         }
         
         context.log(`Selected voice: ${selectedVoice} (${availableVoices[selectedVoice].name})`);
-
+        
+        // === VOICE CHANGE DETECTION SYSTEM ===
+        
+        // Function to detect voice change in conversation history
+        function detectVoiceChange(conversationHistory, currentVoice) {
+            if (!conversationHistory || conversationHistory.length === 0) {
+                return { hasChanged: false, previousVoice: null };
+            }
+            
+            // Find the last assistant message to check what voice was used
+            const lastAssistantMessage = conversationHistory
+                .slice()
+                .reverse()
+                .find(msg => msg.role === 'assistant');
+            
+            if (!lastAssistantMessage) {
+                return { hasChanged: false, previousVoice: null };
+            }
+            
+            // Extract voice information from the last assistant message
+            // Check multiple possible sources for voice information
+            const lastUsedVoice = lastAssistantMessage.voiceUsed || 
+                                 lastAssistantMessage.metadata?.voiceUsed ||
+                                 inferVoiceFromContent(lastAssistantMessage.content) ||
+                                 detectVoiceFromHistory(conversationHistory);
+            
+            if (lastUsedVoice && lastUsedVoice !== currentVoice) {
+                return { 
+                    hasChanged: true, 
+                    previousVoice: lastUsedVoice,
+                    previousName: availableVoices[lastUsedVoice]?.name || 'Unknown'
+                };
+            }
+            
+            return { hasChanged: false, previousVoice: lastUsedVoice };
+        }
+        
+        // Enhanced function to detect voice from conversation history
+        function detectVoiceFromHistory(conversationHistory) {
+            // Look for voice transition messages in the history
+            const voiceTransitionMessage = conversationHistory
+                .slice()
+                .reverse()
+                .find(msg => msg.role === 'system' && msg.content.includes('[VOICE_TRANSITION]'));
+            
+            if (voiceTransitionMessage) {
+                if (voiceTransitionMessage.content.includes('Klaus')) {
+                    return 'de-DE-KlausNeural';
+                } else if (voiceTransitionMessage.content.includes('Katja')) {
+                    return 'de-DE-KatjaNeural';
+                }
+            }
+            
+            // Default fallback - assume Katja if no voice information found
+            return 'de-DE-KatjaNeural';
+        }
+        
+        // Function to infer voice from content patterns (fallback method)
+        function inferVoiceFromContent(content) {
+            // This is a fallback - in practice, we should store voice info in messages
+            // For now, we'll return null and rely on explicit voice tracking
+            return null;
+        }
+        
+        // Function to generate voice transition message
+        function generateVoiceTransitionMessage(currentVoice, previousVoice, previousName) {
+            const currentName = availableVoices[currentVoice]?.name;
+            const currentGender = availableVoices[currentVoice]?.gender;
+            
+            if (currentName === 'Klaus' && previousName === 'Katja') {
+                return {
+                    role: 'system',
+                    content: `[VOICE_TRANSITION] Der Sprecher hat sich geändert. Jetzt spricht Klaus (männlich, natürlich und warm) anstatt Katja. Klaus stellt sich kurz vor und führt das Gespräch nahtlos fort. Klaus hat eine etwas andere Persönlichkeit - er ist männlich, warm und natürlich im Gesprächsstil.`
+                };
+            } else if (currentName === 'Katja' && previousName === 'Klaus') {
+                return {
+                    role: 'system',
+                    content: `[VOICE_TRANSITION] Der Sprecher hat sich geändert. Jetzt spricht Katja (weiblich, freundlich und pädagogisch) anstatt Klaus. Katja stellt sich kurz vor und führt das Gespräch nahtlos fort. Katja hat eine etwas andere Persönlichkeit - sie ist weiblich, freundlich und pädagogisch im Gesprächsstil.`
+                };
+            } else {
+                return {
+                    role: 'system',
+                    content: `[VOICE_TRANSITION] Der Sprecher hat sich geändert. Jetzt spricht ${currentName} (${currentGender}) anstatt ${previousName}. ${currentName} stellt sich kurz vor und führt das Gespräch nahtlos fort.`
+                };
+            }
+        }
+        
+        // Detect voice change
+        const voiceChangeInfo = detectVoiceChange(conversationHistory, selectedVoice);
+        context.log(`Voice change detection: ${JSON.stringify(voiceChangeInfo)}`);
+        
         // STEP 1: Call OpenAI for German response with retry system
         context.log('Step 1: Calling OpenAI API with retry protection...');
         
@@ -536,6 +654,21 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
                     ssmlSource: 'Cached Audio',
                     detectedLevel: detectedLevel,
                     appliedLevel: userCEFRLevel,
+                    // Enhanced voice context information
+                    voiceContext: {
+                        currentVoice: selectedVoice,
+                        currentVoiceName: availableVoices[selectedVoice]?.name,
+                        voiceChanged: voiceChangeInfo.hasChanged,
+                        previousVoice: voiceChangeInfo.previousVoice,
+                        previousVoiceName: voiceChangeInfo.previousName
+                    },
+                    // Message metadata for conversation history
+                    messageMetadata: {
+                        voiceUsed: selectedVoice,
+                        voiceName: availableVoices[selectedVoice]?.name,
+                        gender: availableVoices[selectedVoice]?.gender,
+                        timestamp: new Date().toISOString()
+                    },
                     tokenCalculation: {
                         inputTokens: estimateTokens(transcript),
                         allocatedTokens: dynamicMaxTokens,
@@ -685,10 +818,26 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
                 voiceUsed: selectedVoice,
                 sessionId: `voice_${Date.now()}`,
                 timestamp: new Date().toISOString(),
-                pipeline: 'GPT-4o + CEFR-Adaptive SSML + Katja TTS v2.0',
+                pipeline: 'GPT-4o + CEFR-Adaptive SSML + Enhanced Voice Context v3.0',
                 ssmlSource: 'Modular CEFR-Aware Engine',
                 detectedLevel: detectedLevel, // AI-detected from response
                 appliedLevel: userCEFRLevel,  // Actually used for TTS generation
+                // Enhanced voice context information
+                voiceContext: {
+                    currentVoice: selectedVoice,
+                    currentVoiceName: availableVoices[selectedVoice]?.name,
+                    voiceChanged: voiceChangeInfo.hasChanged,
+                    previousVoice: voiceChangeInfo.previousVoice,
+                    previousVoiceName: voiceChangeInfo.previousName,
+                    transitionHandled: voiceChangeInfo.hasChanged
+                },
+                // Message metadata for conversation history
+                messageMetadata: {
+                    voiceUsed: selectedVoice,
+                    voiceName: availableVoices[selectedVoice]?.name,
+                    gender: availableVoices[selectedVoice]?.gender,
+                    timestamp: new Date().toISOString()
+                },
                 tokenCalculation: {
                     inputTokens: estimateTokens(transcript),
                     allocatedTokens: dynamicMaxTokens,
@@ -703,13 +852,15 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
                     styledegree: '0.8',
                     adaptivePauses: true,
                     naturalVariation: true,
-                    retryProtection: true
+                    retryProtection: true,
+                    voiceTransition: voiceChangeInfo.hasChanged
                 },
                 performance: {
                     hasAudio: !!audioData,
                     audioSize: audioData ? Math.round(audioData.length * 0.75) : 0, // Approximate bytes
                     ssmlValidated: true,
                     cacheHit: false,
+                    voiceContextProcessed: true,
                     cacheStats: {
                         userProfiles: CacheService.getUserProfileStats(),
                         ttsAudio: CacheService.getTTSCacheStats()
