@@ -3,6 +3,7 @@ const { BlobServiceClient } = require('@azure/storage-blob');
 const { CosmosClient } = require('@azure/cosmos');
 const { v4: uuidv4 } = require('uuid');
 const multiparty = require('multiparty');
+const fs = require('fs');
 
 // Configuración de Azure Storage
 const storageConnectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
@@ -212,7 +213,7 @@ async function appendTurn(context, req, corsHeaders, userId) {
     }
 
     // Update session in Cosmos DB
-    await sessionsContainer.item(sessionId, sessionId).replace(session);
+    await sessionsContainer.item(sessionId, userId).replace(session);
 
     context.res = {
         status: 200,
@@ -236,7 +237,7 @@ async function endSession(context, req, corsHeaders, userId) {
     context.log(`Ending session: ${sessionId} for userId: ${userId}`);
 
     // Get session from Cosmos DB
-    const { resource: session } = await sessionsContainer.item(sessionId, sessionId).read();
+    const { resource: session } = await sessionsContainer.item(sessionId, userId).read();
     context.log(`Result of Cosmos DB read in endSession: ${JSON.stringify(session)}`); // <-- NUEVO LOG
 
     if (!session) {
@@ -264,7 +265,7 @@ async function endSession(context, req, corsHeaders, userId) {
     session.transcriptUrl = `${userId}/${sessionId}/transcript.json`;
 
     // Update session in Cosmos DB
-    await sessionsContainer.item(sessionId, sessionId).replace(session);
+    await sessionsContainer.item(sessionId, userId).replace(session);
 
     context.res = {
         status: 200,
