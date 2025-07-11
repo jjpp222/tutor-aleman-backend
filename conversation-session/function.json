@@ -5,7 +5,8 @@
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "methods": ["get", "post", "put"]
+      "methods": ["get", "post", "put"],
+      "route": "conversation-session/{action?}"
     },
     {
       "type": "http",
