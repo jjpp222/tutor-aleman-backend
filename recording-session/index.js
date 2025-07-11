@@ -3,6 +3,7 @@ const { BlobServiceClient } = require('@azure/storage-blob');
 const { CosmosClient } = require('@azure/cosmos');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
+const fetch = require('node-fetch');
 
 // Configuración de Azure Storage
 const storageConnectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
@@ -161,12 +162,10 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
     const sasExpiry = new Date();
     sasExpiry.setHours(sasExpiry.getHours() + 2); // 2 hours expiry
     
-    const userAudioPath = `${userId}/${sessionId}/session_user.wav`;
     const botAudioPath = `${userId}/${sessionId}/session_bot.mp3`;
     const transcriptPath = `${userId}/${sessionId}/transcript.json`;
     
-    // Generate SAS URLs for uploads
-    const userAudioSAS = await generateSASUrl(containerClient, userAudioPath, 'w', sasExpiry);
+    // Generate SAS URLs for uploads (only transcript needed in new system)
     const botAudioSAS = await generateSASUrl(containerClient, botAudioPath, 'w', sasExpiry);
     const transcriptSAS = await generateSASUrl(containerClient, transcriptPath, 'w', sasExpiry);
 
@@ -177,7 +176,6 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
             success: true,
             sessionId: sessionId,
             uploadUrls: {
-                userAudio: userAudioSAS,
                 botAudio: botAudioSAS,
                 transcript: transcriptSAS
             },
@@ -257,15 +255,24 @@ async function endSession(context, req, corsHeaders, userId) {
     session.endedUtc = endTime.toISOString();
     session.duration = duration;
 
-    // Set audio URLs
+    // Set audio URLs (mixed audio will be created by mix-session function)
     session.audioUrls = {
-        user: `${userId}/${sessionId}/session_user.wav`,
+        mixed: `${userId}/${sessionId}/session_mix.mp3`,
         bot: `${userId}/${sessionId}/session_bot.mp3`
     };
     session.transcriptUrl = `${userId}/${sessionId}/transcript.json`;
 
     // Update session in Cosmos DB
     await sessionsContainer.item(sessionId, userId).replace(session);
+
+    // Trigger mix-session function to create mixed audio (async - don't wait)
+    try {
+        await triggerMixSession(sessionId, userId);
+        context.log(`Mix session triggered for: ${sessionId}`);
+    } catch (error) {
+        context.log.error(`Failed to trigger mix session: ${error.message}`);
+        // Don't fail the session ending if mix fails
+    }
 
     context.res = {
         status: 200,
@@ -418,9 +425,9 @@ async function downloadSession(context, req, corsHeaders, userId) {
 
     const downloadUrls = {};
 
-    // Generate SAS for user audio
-    if (session.audioUrls.user) {
-        downloadUrls.userAudio = await generateSASUrl(containerClient, session.audioUrls.user, 'r', sasExpiry);
+    // Generate SAS for mixed audio
+    if (session.audioUrls.mixed) {
+        downloadUrls.mixedAudio = await generateSASUrl(containerClient, session.audioUrls.mixed, 'r', sasExpiry);
     }
 
     // Generate SAS for bot audio
@@ -470,4 +477,27 @@ async function generateSASUrl(containerClient, blobPath, permissions, expiryTime
     } catch (error) {
         throw new Error(`Failed to generate SAS URL: ${error.message}`);
     }
+}
+
+async function triggerMixSession(sessionId, userId) {
+    const mixSessionUrl = process.env.MIX_SESSION_FUNCTION_URL || 
+        `${process.env.AZURE_FUNCTION_BASE_URL || 'https://tutor-aleman-api-v2.azurewebsites.net'}/api/mix-session`;
+    
+    const response = await fetch(mixSessionUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-functions-key': process.env.AZURE_FUNCTIONS_MASTER_KEY || process.env.MIX_SESSION_FUNCTION_KEY
+        },
+        body: JSON.stringify({
+            sessionId: sessionId,
+            userId: userId
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`Mix session API call failed: ${response.status} ${response.statusText}`);
+    }
+
+    return await response.json();
 }
