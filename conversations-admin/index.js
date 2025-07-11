@@ -86,6 +86,8 @@ module.exports = async function (context, req) {
                     await listStudentConversations(context, req, corsHeaders);
                 } else if (segments.includes('download')) {
                     await downloadSessionPackage(context, req, corsHeaders);
+                } else if (segments.includes('transcript')) {
+                    await getSessionTranscript(context, req, corsHeaders);
                 } else {
                     throw new Error('Invalid GET endpoint');
                 }
@@ -312,6 +314,93 @@ async function downloadSessionPackage(context, req, corsHeaders) {
             availableFiles: files.map(f => f.name)
         }
     };
+}
+
+async function getSessionTranscript(context, req, corsHeaders) {
+    const sessionId = req.query.sessionId;
+    
+    if (!sessionId) {
+        throw new Error('Missing sessionId parameter');
+    }
+
+    context.log(`Admin requesting transcript for session: ${sessionId}`);
+
+    // Get session from Cosmos DB
+    const querySpec = {
+        query: "SELECT * FROM c WHERE c.id = @sessionId",
+        parameters: [
+            { name: "@sessionId", value: sessionId }
+        ]
+    };
+
+    const { resources: sessions } = await sessionsContainer.items.query(querySpec).fetchAll();
+    
+    if (sessions.length === 0) {
+        throw new Error('Session not found');
+    }
+
+    const session = sessions[0];
+
+    if (!session.transcriptUrl) {
+        throw new Error('No transcript available for this session');
+    }
+
+    try {
+        // Get transcript from Azure Blob Storage
+        const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
+        const transcriptBlobClient = containerClient.getBlobClient(session.transcriptUrl);
+        
+        const exists = await transcriptBlobClient.exists();
+        if (!exists) {
+            throw new Error('Transcript file not found in storage');
+        }
+
+        // Download transcript content
+        const downloadResponse = await transcriptBlobClient.download(0);
+        const transcriptContent = await streamToString(downloadResponse.readableStreamBody);
+        
+        let transcriptData;
+        try {
+            transcriptData = JSON.parse(transcriptContent);
+        } catch (parseError) {
+            throw new Error('Invalid transcript format');
+        }
+
+        context.res = {
+            status: 200,
+            headers: corsHeaders,
+            body: {
+                success: true,
+                sessionId: sessionId,
+                transcript: transcriptData,
+                sessionInfo: {
+                    date: session.startedUtc,
+                    duration: session.duration,
+                    userLevel: session.userLevel,
+                    voicesUsed: session.voicesUsed,
+                    totalMessages: session.totalMessages
+                }
+            }
+        };
+
+    } catch (error) {
+        context.log(`Error retrieving transcript: ${error.message}`);
+        throw new Error(`Failed to retrieve transcript: ${error.message}`);
+    }
+}
+
+// Helper function to convert stream to string
+async function streamToString(readableStream) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        readableStream.on('data', (data) => {
+            chunks.push(data.toString());
+        });
+        readableStream.on('end', () => {
+            resolve(chunks.join(''));
+        });
+        readableStream.on('error', reject);
+    });
 }
 
 // === UTILITY FUNCTIONS ===
