@@ -116,6 +116,7 @@ module.exports = async function (context, req) {
 
 async function startSession(context, req, corsHeaders, userId, userLevel) {
     context.log(`Starting new session for user: ${userId}`);
+    context.log(`User ID from token in startSession: ${userId}`); // <-- NUEVO LOG
     
     const sessionId = `sess_${Date.now()}_${userId}_${uuidv4().substring(0, 8)}`;
     const startTime = new Date().toISOString();
