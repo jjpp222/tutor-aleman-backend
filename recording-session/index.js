@@ -128,6 +128,7 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
     const sessionDoc = {
         id: sessionId,
         studentId: userId,
+        userId: userId, // Explicit partition key property
         startedUtc: startTime,
         endedUtc: null,
         status: 'active',
@@ -144,7 +145,7 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
     };
 
     try {
-        await sessionsContainer.items.create(sessionDoc);
+        await sessionsContainer.items.create(sessionDoc, { partitionKey: userId });
         context.log(`Session document created: ${sessionId}`);
     } catch (error) {
         context.log.error(`Failed to create session document: ${error.message}`);
