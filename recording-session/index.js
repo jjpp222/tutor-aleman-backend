@@ -2,6 +2,7 @@ const { validateJWT } = require('../shared/auth');
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { CosmosClient } = require('@azure/cosmos');
 const { v4: uuidv4 } = require('uuid');
+const multiparty = require('multiparty');
 
 // Configuración de Azure Storage
 const storageConnectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
@@ -282,17 +283,29 @@ async function appendBotAudio(context, req, corsHeaders, userId) {
     try {
         context.log('Appending bot audio for user:', userId);
         
-        // Parse form data from request
-        const sessionId = req.body.sessionId;
-        const botText = req.body.botText;
-        const timestamp = req.body.timestamp;
-        const audioFile = req.body.audio;
+        // Parse multipart form data
+        const form = new multiparty.Form();
+        const formData = await new Promise((resolve, reject) => {
+            form.parse(req, (err, fields, files) => {
+                if (err) reject(err);
+                else resolve({ fields, files });
+            });
+        });
+        
+        const sessionId = formData.fields.sessionId?.[0];
+        const botText = formData.fields.botText?.[0];
+        const timestamp = formData.fields.timestamp?.[0];
+        const audioFile = formData.files.audio?.[0];
         
         if (!sessionId || !botText || !audioFile) {
             throw new Error('Missing required fields: sessionId, botText, or audio');
         }
         
-        context.log(`Bot audio data - Session: ${sessionId}, Text length: ${botText.length}, Audio size: ${audioFile.length}`);
+        // Read file data for multiparty
+        const fs = require('fs');
+        const fileData = fs.readFileSync(audioFile.path);
+        
+        context.log(`Bot audio data - Session: ${sessionId}, Text length: ${botText.length}, Audio size: ${fileData.length}`);
         
         // Verify session exists and belongs to user
         const { resource: session } = await sessionsContainer.item(sessionId, userId).read();
@@ -308,7 +321,7 @@ async function appendBotAudio(context, req, corsHeaders, userId) {
         const blobClient = containerClient.getBlockBlobClient(audioPath);
         
         // Upload the audio file
-        await blobClient.upload(audioFile, audioFile.length, {
+        await blobClient.upload(fileData, fileData.length, {
             blobHTTPHeaders: {
                 blobContentType: 'audio/mpeg'
             }

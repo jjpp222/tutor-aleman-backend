@@ -28,6 +28,7 @@
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.35.0",
+    "multiparty": "^4.2.3",
     "node-cache": "^5.1.2",
     "node-fetch": "^2.6.12",
     "openai": "^4.28.0",
