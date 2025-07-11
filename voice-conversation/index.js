@@ -300,7 +300,11 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
         context.log(`Detected CEFR level: ${detectedLevel}`);
         context.log(`Clean response for TTS: ${cleanTextResponse}`);
         
-        // === SSML GENERATION MODULES ===
+        // === ENHANCED SSML GENERATION MODULES ===
+        
+        // NUEVO: Constantes para la división de texto
+        const MAX_SECONDS_PER_CHUNK = 18; // Límite de 18s para evitar timeouts de 20s
+        const CHARS_PER_SECOND_ESTIMATE = 16; // Estimación conservadora para el alemán
         
         // Utility function for natural voice variation
         function vary(baseValue, range = 2) {
@@ -311,7 +315,17 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             return `${result.toFixed(1)}%`;
         }
         
-        // Text analysis and pattern detection
+        // NUEVO: Función de variación que devuelve un número para cálculos
+        function varyNumeric(base, range = 2) {
+            return base + (Math.random() * range * 2 - range);
+        }
+        
+        // NUEVO: Función para estimar la duración de la locución
+        function estimateDuration(text) {
+            return text.length / CHARS_PER_SECOND_ESTIMATE;
+        }
+        
+        // Enhanced text analysis with emotional context
         function analyzeText(text) {
             return {
                 isCorrection: /man könnte auch sagen|fast richtig|gut gesagt|noch besser wäre/i.test(text),
@@ -319,11 +333,33 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
                 isShort: text.length < 50,
                 hasEmphasis: /\*\w+\*/g.test(text),
                 wordCount: text.trim().split(/\s+/).length,
-                characterCount: text.length
+                characterCount: text.length,
+                // Nuevos análisis emocionales
+                isPositive: /super|toll|fantastisch|prima|sehr gut|perfekt|bravo|genau richtig/i.test(text),
+                isExplanation: /weil|deshalb|darum|nämlich|also|das bedeutet|das heißt/i.test(text),
+                isEncouragement: /keine sorge|macht nichts|das ist normal|versuch es nochmal|du schaffst das/i.test(text)
             };
         }
         
-        // Prosody engine for rate and pitch calculation with C2 support and voice-specific optimization
+        // CAMBIO: selectVoiceStyle ahora puede devolver null para fallback
+        function selectVoiceStyle(textAnalysis) {
+            if (textAnalysis.isCorrection) {
+                return { style: "empathetic", degree: "1.2" };
+            }
+            if (textAnalysis.isPositive) {
+                return { style: "cheerful", degree: "1.1" };
+            }
+            if (textAnalysis.isExplanation) {
+                return { style: "documentary", degree: "0.9" };
+            }
+            if (textAnalysis.isEncouragement) {
+                return { style: "empathetic", degree: "0.9" };
+            }
+            // Fallback a voz neutra (sin estilo)
+            return null;
+        }
+        
+        // Enhanced prosody engine with controlled emphasis
         function calculateProsody(textAnalysis, cefrLevel, turnCount = 0, voiceName = 'de-DE-KatjaNeural') {
             // CEFR-based rates (WPM optimized)
             const baseRates = {
@@ -376,56 +412,49 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             // 7. Volume calculation
             let volumeValue = 0; // Default to +0%
             if (voiceName === 'de-DE-KlausNeural') {
-                if (textAnalysis.isEmphasis) volumeValue += 3; // Slightly louder for emphasis
+                if (textAnalysis.hasEmphasis) volumeValue += 3; // Slightly louder for emphasis
                 else if (textAnalysis.isQuestion) volumeValue += 1; // Slightly louder for questions
             } else {
                 // Katja Neural
-                if (textAnalysis.isEmphasis) volumeValue += 4; // More pronounced for emphasis
+                if (textAnalysis.hasEmphasis) volumeValue += 4; // More pronounced for emphasis
             }
             const volume = `${volumeValue.toFixed(1)}%`;
             
             return { rate, pitch, volume };
         }
         
-        // Advanced pause calculation with voice-specific optimization
-        function calculateBreakStrength(punctuation, sentenceLength, cefrLevel, voiceName = 'de-DE-KatjaNeural') {
-            let strength = 'none'; // Default
+        // CAMBIO: getEmphasisProsody con la lógica mejorada y límites de seguridad
+        function getEmphasisProsody(baseProsody) {
+            // Extraemos los valores numéricos de la prosodia base
+            const baseVolume = parseFloat(baseProsody.volume) || 0;
+            const basePitch = parseFloat(baseProsody.pitch) || 0;
 
-            if (punctuation === '?') {
-                strength = 'strong';
-            } else if (punctuation === '.') {
-                strength = 'medium';
-            } else if (punctuation === ',') {
-                strength = 'weak';
-            }
+            // Aplicamos la lógica con límites para evitar valores extremos
+            const vol = Math.min(baseVolume + 10, 50); // Aumenta volumen hasta un máx. de +50%
+            const pit = Math.max(Math.min(varyNumeric(basePitch, 2), 6), -6); // Varía el tono dentro del rango de -6% a +6%
 
-            // Optional: Adjust strength based on CEFR level for more natural flow
-            // For lower levels (A1, A2), slightly stronger breaks might be helpful for clarity.
-            // For higher levels (C1, C2), slightly weaker breaks for more fluent speech.
-            if (cefrLevel === 'A1' || cefrLevel === 'A2') {
-                if (strength === 'weak') strength = 'medium';
-                else if (strength === 'medium') strength = 'strong';
-            } else if (cefrLevel === 'C1' || cefrLevel === 'C2') {
-                if (strength === 'medium') strength = 'weak';
-                else if (strength === 'strong') strength = 'medium';
-            }
-            
-            return strength;
+            return `volume="+${vol.toFixed(1)}%" pitch="${pit.toFixed(1)}%"`;
         }
         
-        // Text processor for emphasis and pauses
-        function processTextForSSML(text, cefrLevel, voiceName = 'de-DE-KatjaNeural') {
+        // Enhanced text processor with German-specific optimizations
+        function processTextForSSML(text, cefrLevel, voiceName = 'de-DE-KatjaNeural', baseProsody = null) {
             // 1) Escape XML characters from the raw text
             let processed = text
                 .replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
                 .replace(/>/g, "&gt;");
             
-            // 2) Convert Markdown *emphasis* to SSML <emphasis>
-            // Use 'strong' emphasis as requested
-            processed = processed.replace(/\*(.+?)\*/g, (_, inner) =>
-                `<emphasis level="strong">${inner.trim()}</emphasis>`
-            );
+            // 2) Convert Markdown *emphasis* to SSML <emphasis> with controlled prosody
+            if (baseProsody) {
+                const emphasisProsody = getEmphasisProsody(baseProsody);
+                processed = processed.replace(/\*(.+?)\*/g, (_, inner) =>
+                    `<emphasis level="strong"><prosody ${emphasisProsody}>${inner.trim()}</prosody></emphasis>`
+                );
+            } else {
+                processed = processed.replace(/\*(.+?)\*/g, (_, inner) =>
+                    `<emphasis level="strong">${inner.trim()}</emphasis>`
+                );
+            }
 
             // 3) Replace punctuation with breaks
             processed = processed
@@ -438,31 +467,24 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             return processed.trim();
         }
         
-        // SSML template builder (voice-specific optimizations)
-        function buildSSMLTemplate(processedText, prosody, voiceName) {
-            // Klaus Neural optimized for warm, natural conversation
-            if (voiceName === 'de-DE-KlausNeural') {
-                return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
-  <voice name="${voiceName}">
-    <mstts:express-as style="chat" styledegree="0.8">
-      <prosody rate="${prosody.rate}" pitch="${prosody.pitch}" volume="+3%">
-        ${processedText}
-      </prosody>
-    </mstts:express-as>
-  </voice>
-</speak>`;
+        // CAMBIO: buildSSMLTemplate maneja la ausencia de estilo
+        function buildSSMLTemplate(processedText, prosody, voiceName, style = null) {
+            const content = `<prosody rate="${prosody.rate}" pitch="${prosody.pitch}" volume="${prosody.volume}">${processedText}</prosody>`;
+
+            let styledContent;
+            if (style && style.style) {
+                // Si hay un estilo, lo aplicamos
+                styledContent = `<mstts:express-as style="${style.style}" styledegree="${style.degree}">${content}</mstts:express-as>`;
             } else {
-                // Katja Neural (default configuration)
-                return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
-  <voice name="${voiceName}">
-    <mstts:express-as style="chat" styledegree="0.8">
-      <prosody rate="${prosody.rate}" pitch="${prosody.pitch}">
-        ${processedText}
-      </prosody>
-    </mstts:express-as>
-  </voice>
-</speak>`;
+                // Si no, usamos el contenido sin el wrapper de estilo
+                styledContent = content;
             }
+
+            return `<speak version="1.0" xml:lang="de-DE" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts">
+        <voice name="${voiceName}">
+            ${styledContent}
+        </voice>
+    </speak>`;
         }
         
         // Enhanced SSML validation
@@ -531,52 +553,80 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             return;
         }
         
-        // Generate natural SSML with user's confirmed CEFR level and selected voice
-        const ssml = generateNaturalSSML(cleanTextResponse, userCEFRLevel, selectedVoice);
+        // NUEVO: Función orquestadora principal que divide el texto en fragmentos
+        function generateSSMLChunks(text, cefrLevel, voiceName) {
+            const totalDuration = estimateDuration(text);
+            if (totalDuration <= MAX_SECONDS_PER_CHUNK) {
+                // Si el texto es corto, procesarlo como uno solo y devolverlo en un array
+                return [generateSingleEnhancedSSML(text, cefrLevel, voiceName)];
+            }
 
-        // Main SSML generator (refactored with modules)
+            const ssmlChunks = [];
+            // Dividimos el texto por frases para hacer cortes naturales
+            const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+            let currentChunk = "";
+
+            for (const sentence of sentences) {
+                const potentialChunk = currentChunk + " " + sentence;
+                if (estimateDuration(potentialChunk) > MAX_SECONDS_PER_CHUNK && currentChunk) {
+                    // El fragmento actual está lleno, lo procesamos
+                    ssmlChunks.push(generateSingleEnhancedSSML(currentChunk, cefrLevel, voiceName));
+                    // Empezamos un nuevo fragmento con la frase actual
+                    currentChunk = sentence;
+                } else {
+                    // Añadimos la frase al fragmento actual
+                    currentChunk = potentialChunk.trim();
+                }
+            }
+
+            // No olvidar procesar el último fragmento restante
+            if (currentChunk) {
+                ssmlChunks.push(generateSingleEnhancedSSML(currentChunk, cefrLevel, voiceName));
+            }
+
+            return ssmlChunks;
+        }
+        
+        // RENOMBRADA: La función original ahora procesa un único fragmento
+        function generateSingleEnhancedSSML(text, cefrLevel, voiceName) {
+            const textAnalysis = analyzeText(text);
+            const mainProsody = calculateProsody(textAnalysis, cefrLevel, 0, voiceName);
+            const voiceStyle = selectVoiceStyle(textAnalysis);
+            const processedText = processTextForSSML(text, cefrLevel, voiceName, mainProsody);
+            const finalSSML = buildSSMLTemplate(processedText, mainProsody, voiceName, voiceStyle);
+            return finalSSML;
+        }
+        
+        // Generate enhanced SSML with chunking support
+        const ssmlChunks = generateSSMLChunks(cleanTextResponse, userCEFRLevel, selectedVoice);
+        
+        // For compatibility, use the first chunk if it's a single chunk
+        const ssml = ssmlChunks[0];
+        
+        // Enhanced SSML generator with fallback compatibility
         function generateNaturalSSML(text, cefrLevel = 'B1', voiceName = 'de-DE-KatjaNeural') {
             try {
-                // 1. Analyze text patterns
-                const textAnalysis = analyzeText(text);
-                
-                // 2. Calculate prosody parameters with voice-specific optimization
-                const prosody = calculateProsody(textAnalysis, cefrLevel, 0, voiceName);
-                
-                // 3. Process text for SSML (emphasis + pauses)
-                const processedText = processTextForSSML(text, cefrLevel, voiceName);
-                
-                // 4. Build SSML template with selected voice
-                const ssml = buildSSMLTemplate(processedText, prosody, voiceName);
-                
-                // 5. Validate SSML
-                if (!validateSSML(ssml)) {
-                    context.log('SSML validation failed, using fallback');
-                    return generateMinimalSSML(text, voiceName);
-                }
-                
-                context.log(`Generated CEFR-adapted SSML - Voice: ${voiceName}, Level: ${cefrLevel}, Rate: ${prosody.rate}, Pitch: ${prosody.pitch}, Analysis: ${JSON.stringify(textAnalysis)}`);
-                return ssml;
-                
+                // Use the new enhanced system
+                return generateSingleEnhancedSSML(text, cefrLevel, voiceName);
             } catch (error) {
-                context.log(`Modular SSML generation failed: ${error.message}, using minimal fallback`);
+                context.log(`Enhanced SSML generation failed: ${error.message}, using minimal fallback`);
                 return generateMinimalSSML(text, voiceName);
             }
         }
 
-        // Minimal fallback SSML (ultra-safe)
+        // Minimal fallback SSML (ultra-safe) - Updated to match new template structure
         function generateMinimalSSML(response, voiceName = 'de-DE-KatjaNeural') {
             // Clean text of any problematic characters
             const cleanText = response.replace(/[<>&"']/g, '');
-            return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts">
-  <voice name="${voiceName}">
-    <mstts:express-as style="chat" styledegree="0.8">
-      <prosody rate="+0%" pitch="+0%">
-        ${cleanText}
-      </prosody>
-    </mstts:express-as>
-  </voice>
-</speak>`;
+            return `<speak version="1.0" xml:lang="de-DE" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts">
+        <voice name="${voiceName}">
+            <mstts:express-as style="chat" styledegree="0.8">
+                <prosody rate="+0%" pitch="+0%" volume="+0%">
+                    ${cleanText}
+                </prosody>
+            </mstts:express-as>
+        </voice>
+    </speak>`;
         }
 
         // STEP 3: Generate TTS audio with retry protection
