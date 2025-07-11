@@ -24,6 +24,7 @@
     "@azure/cosmos": "^4.1.1",
     "@azure/functions": "^4.5.1",
     "@azure/storage-blob": "^12.17.0",
+    "archiver": "^5.3.2",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.35.0",
