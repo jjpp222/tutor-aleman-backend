@@ -234,6 +234,7 @@ async function endSession(context, req, corsHeaders, userId) {
 
     // Get session from Cosmos DB
     const { resource: session } = await sessionsContainer.item(sessionId, userId).read();
+    context.log(`Result of Cosmos DB read in endSession: ${JSON.stringify(session)}`); // <-- NUEVO LOG
 
     if (!session) {
         context.log.error(`Session not found for sessionId: ${sessionId} and userId: ${userId}`);
