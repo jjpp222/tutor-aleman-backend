@@ -209,17 +209,6 @@ Pase Wortschatz und Komplexität an das CEFR-Niveau des Lernenden an, das dir im
 • El sistema de audio se encarga de la síntesis de voz automáticamente.
 • NUNCA respuestas cortadas o incompletas - ¡termina cada pensamiento por completo!
 
-# —— VOICE TRANSITION HANDLING ——
-**IMPORTANTE: Manejo de cambios de voz/persona:**
-• Si recibes un mensaje [VOICE_TRANSITION], significa que la voz ha cambiado
-• Debes presentarte brevemente como la nueva persona (Klaus/Katja)
-• Continúa la conversación de forma natural y fluida
-• Mantén el contexto de la conversación anterior
-• Usa tu personalidad única:
-  - Klaus: Masculino, cálido, natural, ligeramente más directo
-  - Katja: Femenina, amigable, pedagógica, más detallada en explicaciones
-• Ejemplo: "Hola! Ich bin Klaus. Ich übernehme jetzt das Gespräch. Was hast du gerade gesagt?"
-
 # —— TEMAS DE CONVERSACIÓN ——
 Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros.
 
@@ -233,27 +222,10 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             content: `CEFR=${userCEFRLevel}`
         };
 
-        // Build messages array with voice transition support
-        const baseMessages = [
+        const messages = [
             { role: 'system', content: prompt },
             profileMessage, // ← NUEVO: Always inject user's CEFR level
-            ...(conversationHistory || [])
-        ];
-        
-        // Insert voice transition message if voice has changed
-        if (voiceChangeInfo.hasChanged) {
-            const transitionMessage = generateVoiceTransitionMessage(
-                selectedVoice, 
-                voiceChangeInfo.previousVoice, 
-                voiceChangeInfo.previousName
-            );
-            baseMessages.push(transitionMessage);
-            context.log(`Voice transition message added: ${availableVoices[selectedVoice]?.name} taking over from ${voiceChangeInfo.previousName}`);
-        }
-        
-        // Add current user message
-        const messages = [
-            ...baseMessages,
+            ...(conversationHistory || []),
             { role: 'user', content: transcript.trim() }
         ];
 
@@ -271,97 +243,7 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
         }
         
         context.log(`Selected voice: ${selectedVoice} (${availableVoices[selectedVoice].name})`);
-        
-        // === VOICE CHANGE DETECTION SYSTEM ===
-        
-        // Function to detect voice change in conversation history
-        function detectVoiceChange(conversationHistory, currentVoice) {
-            if (!conversationHistory || conversationHistory.length === 0) {
-                return { hasChanged: false, previousVoice: null };
-            }
-            
-            // Find the last assistant message to check what voice was used
-            const lastAssistantMessage = conversationHistory
-                .slice()
-                .reverse()
-                .find(msg => msg.role === 'assistant');
-            
-            if (!lastAssistantMessage) {
-                return { hasChanged: false, previousVoice: null };
-            }
-            
-            // Extract voice information from the last assistant message
-            // Check multiple possible sources for voice information
-            const lastUsedVoice = lastAssistantMessage.voiceUsed || 
-                                 lastAssistantMessage.metadata?.voiceUsed ||
-                                 inferVoiceFromContent(lastAssistantMessage.content) ||
-                                 detectVoiceFromHistory(conversationHistory);
-            
-            if (lastUsedVoice && lastUsedVoice !== currentVoice) {
-                return { 
-                    hasChanged: true, 
-                    previousVoice: lastUsedVoice,
-                    previousName: availableVoices[lastUsedVoice]?.name || 'Unknown'
-                };
-            }
-            
-            return { hasChanged: false, previousVoice: lastUsedVoice };
-        }
-        
-        // Enhanced function to detect voice from conversation history
-        function detectVoiceFromHistory(conversationHistory) {
-            // Look for voice transition messages in the history
-            const voiceTransitionMessage = conversationHistory
-                .slice()
-                .reverse()
-                .find(msg => msg.role === 'system' && msg.content.includes('[VOICE_TRANSITION]'));
-            
-            if (voiceTransitionMessage) {
-                if (voiceTransitionMessage.content.includes('Klaus')) {
-                    return 'de-DE-KlausNeural';
-                } else if (voiceTransitionMessage.content.includes('Katja')) {
-                    return 'de-DE-KatjaNeural';
-                }
-            }
-            
-            // Default fallback - assume Katja if no voice information found
-            return 'de-DE-KatjaNeural';
-        }
-        
-        // Function to infer voice from content patterns (fallback method)
-        function inferVoiceFromContent(content) {
-            // This is a fallback - in practice, we should store voice info in messages
-            // For now, we'll return null and rely on explicit voice tracking
-            return null;
-        }
-        
-        // Function to generate voice transition message
-        function generateVoiceTransitionMessage(currentVoice, previousVoice, previousName) {
-            const currentName = availableVoices[currentVoice]?.name;
-            const currentGender = availableVoices[currentVoice]?.gender;
-            
-            if (currentName === 'Klaus' && previousName === 'Katja') {
-                return {
-                    role: 'system',
-                    content: `[VOICE_TRANSITION] Der Sprecher hat sich geändert. Jetzt spricht Klaus (männlich, natürlich und warm) anstatt Katja. Klaus stellt sich kurz vor und führt das Gespräch nahtlos fort. Klaus hat eine etwas andere Persönlichkeit - er ist männlich, warm und natürlich im Gesprächsstil.`
-                };
-            } else if (currentName === 'Katja' && previousName === 'Klaus') {
-                return {
-                    role: 'system',
-                    content: `[VOICE_TRANSITION] Der Sprecher hat sich geändert. Jetzt spricht Katja (weiblich, freundlich und pädagogisch) anstatt Klaus. Katja stellt sich kurz vor und führt das Gespräch nahtlos fort. Katja hat eine etwas andere Persönlichkeit - sie ist weiblich, freundlich und pädagogisch im Gesprächsstil.`
-                };
-            } else {
-                return {
-                    role: 'system',
-                    content: `[VOICE_TRANSITION] Der Sprecher hat sich geändert. Jetzt spricht ${currentName} (${currentGender}) anstatt ${previousName}. ${currentName} stellt sich kurz vor und führt das Gespräch nahtlos fort.`
-                };
-            }
-        }
-        
-        // Detect voice change
-        const voiceChangeInfo = detectVoiceChange(conversationHistory, selectedVoice);
-        context.log(`Voice change detection: ${JSON.stringify(voiceChangeInfo)}`);
-        
+
         // STEP 1: Call OpenAI for German response with retry system
         context.log('Step 1: Calling OpenAI API with retry protection...');
         
@@ -418,11 +300,7 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
         context.log(`Detected CEFR level: ${detectedLevel}`);
         context.log(`Clean response for TTS: ${cleanTextResponse}`);
         
-        // === ENHANCED SSML GENERATION MODULES ===
-        
-        // NUEVO: Constantes para la división de texto
-        const MAX_SECONDS_PER_CHUNK = 18; // Límite de 18s para evitar timeouts de 20s
-        const CHARS_PER_SECOND_ESTIMATE = 16; // Estimación conservadora para el alemán
+        // === SSML GENERATION MODULES ===
         
         // Utility function for natural voice variation
         function vary(baseValue, range = 2) {
@@ -433,17 +311,7 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             return `${result.toFixed(1)}%`;
         }
         
-        // NUEVO: Función de variación que devuelve un número para cálculos
-        function varyNumeric(base, range = 2) {
-            return base + (Math.random() * range * 2 - range);
-        }
-        
-        // NUEVO: Función para estimar la duración de la locución
-        function estimateDuration(text) {
-            return text.length / CHARS_PER_SECOND_ESTIMATE;
-        }
-        
-        // Enhanced text analysis with emotional context
+        // Text analysis and pattern detection
         function analyzeText(text) {
             return {
                 isCorrection: /man könnte auch sagen|fast richtig|gut gesagt|noch besser wäre/i.test(text),
@@ -451,33 +319,11 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
                 isShort: text.length < 50,
                 hasEmphasis: /\*\w+\*/g.test(text),
                 wordCount: text.trim().split(/\s+/).length,
-                characterCount: text.length,
-                // Nuevos análisis emocionales
-                isPositive: /super|toll|fantastisch|prima|sehr gut|perfekt|bravo|genau richtig/i.test(text),
-                isExplanation: /weil|deshalb|darum|nämlich|also|das bedeutet|das heißt/i.test(text),
-                isEncouragement: /keine sorge|macht nichts|das ist normal|versuch es nochmal|du schaffst das/i.test(text)
+                characterCount: text.length
             };
         }
         
-        // CAMBIO: selectVoiceStyle ahora puede devolver null para fallback
-        function selectVoiceStyle(textAnalysis) {
-            if (textAnalysis.isCorrection) {
-                return { style: "empathetic", degree: "1.2" };
-            }
-            if (textAnalysis.isPositive) {
-                return { style: "cheerful", degree: "1.1" };
-            }
-            if (textAnalysis.isExplanation) {
-                return { style: "documentary", degree: "0.9" };
-            }
-            if (textAnalysis.isEncouragement) {
-                return { style: "empathetic", degree: "0.9" };
-            }
-            // Fallback a voz neutra (sin estilo)
-            return null;
-        }
-        
-        // Enhanced prosody engine with controlled emphasis
+        // Prosody engine for rate and pitch calculation with C2 support and voice-specific optimization
         function calculateProsody(textAnalysis, cefrLevel, turnCount = 0, voiceName = 'de-DE-KatjaNeural') {
             // CEFR-based rates (WPM optimized)
             const baseRates = {
@@ -494,10 +340,11 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             
             // 2. Voice-specific adjustments for naturalness
             if (voiceName === 'de-DE-KlausNeural') {
-                // Klaus Neural has naturally good pacing, minimal adjustments needed
-                rateValue += 1; // Slightly faster base rate for warmth
-                if (textAnalysis.isQuestion) rateValue += 1; // Natural question intonation
-                if (textAnalysis.isShort) rateValue += 2; // Responsive short answers
+                // Klaus Neural optimized for smoother, less robotic flow
+                rateValue += 3; // Faster base rate to reduce robotic pauses
+                if (textAnalysis.isQuestion) rateValue += 2; // Natural question intonation
+                if (textAnalysis.isShort) rateValue += 3; // More responsive short answers
+                if (textAnalysis.isCorrection) rateValue += 1; // Less slow on corrections
             }
             
             // 3. Contextual adjustments
@@ -514,13 +361,13 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             const finalRate = Math.max(-15, Math.min(rateValue, 35));
             const rate = `${finalRate.toFixed(1)}%`;
             
-            // 6. Voice-specific pitch optimization
+            // 6. Voice-specific pitch optimization  
             let pitch = "+0%";
             if (voiceName === 'de-DE-KlausNeural') {
-                // Klaus Neural has natural warmth, minimal pitch adjustments
-                if (textAnalysis.isCorrection) pitch = "+1%"; // Gentle correction tone
-                else if (textAnalysis.isQuestion) pitch = "+2%"; // Warm question intonation
-                else if (Math.random() < 0.3) pitch = vary("+0%", 1); // Subtle natural variation
+                // Klaus Neural with more natural pitch variation
+                if (textAnalysis.isCorrection) pitch = "+0.5%"; // Very gentle correction tone
+                else if (textAnalysis.isQuestion) pitch = "+1.5%"; // Moderate question intonation
+                else if (Math.random() < 0.4) pitch = vary("+0%", 1.5); // More frequent, subtle variation
             } else {
                 // Katja Neural (original configuration)
                 if (textAnalysis.isCorrection) pitch = "+3%";
@@ -530,79 +377,103 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             // 7. Volume calculation
             let volumeValue = 0; // Default to +0%
             if (voiceName === 'de-DE-KlausNeural') {
-                if (textAnalysis.hasEmphasis) volumeValue += 3; // Slightly louder for emphasis
+                if (textAnalysis.isEmphasis) volumeValue += 3; // Slightly louder for emphasis
                 else if (textAnalysis.isQuestion) volumeValue += 1; // Slightly louder for questions
             } else {
                 // Katja Neural
-                if (textAnalysis.hasEmphasis) volumeValue += 4; // More pronounced for emphasis
+                if (textAnalysis.isEmphasis) volumeValue += 4; // More pronounced for emphasis
             }
             const volume = `${volumeValue.toFixed(1)}%`;
             
             return { rate, pitch, volume };
         }
         
-        // CAMBIO: getEmphasisProsody con la lógica mejorada y límites de seguridad
-        function getEmphasisProsody(baseProsody) {
-            // Extraemos los valores numéricos de la prosodia base
-            const baseVolume = parseFloat(baseProsody.volume) || 0;
-            const basePitch = parseFloat(baseProsody.pitch) || 0;
+        // Advanced pause calculation with voice-specific optimization
+        function calculateBreakStrength(punctuation, sentenceLength, cefrLevel, voiceName = 'de-DE-KatjaNeural') {
+            let strength = 'none'; // Default
 
-            // Aplicamos la lógica con límites para evitar valores extremos
-            const vol = Math.min(baseVolume + 10, 50); // Aumenta volumen hasta un máx. de +50%
-            const pit = Math.max(Math.min(varyNumeric(basePitch, 2), 6), -6); // Varía el tono dentro del rango de -6% a +6%
+            if (punctuation === '?') {
+                strength = 'strong';
+            } else if (punctuation === '.') {
+                strength = 'medium';
+            } else if (punctuation === ',') {
+                strength = 'weak';
+            }
 
-            return `volume="+${vol.toFixed(1)}%" pitch="${pit.toFixed(1)}%"`;
+            // Optional: Adjust strength based on CEFR level for more natural flow
+            // For lower levels (A1, A2), slightly stronger breaks might be helpful for clarity.
+            // For higher levels (C1, C2), slightly weaker breaks for more fluent speech.
+            if (cefrLevel === 'A1' || cefrLevel === 'A2') {
+                if (strength === 'weak') strength = 'medium';
+                else if (strength === 'medium') strength = 'strong';
+            } else if (cefrLevel === 'C1' || cefrLevel === 'C2') {
+                if (strength === 'medium') strength = 'weak';
+                else if (strength === 'strong') strength = 'medium';
+            }
+            
+            return strength;
         }
         
-        // Enhanced text processor with German-specific optimizations
-        function processTextForSSML(text, cefrLevel, voiceName = 'de-DE-KatjaNeural', baseProsody = null) {
+        // Text processor for emphasis and pauses
+        function processTextForSSML(text, cefrLevel, voiceName = 'de-DE-KatjaNeural') {
             // 1) Escape XML characters from the raw text
             let processed = text
                 .replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
                 .replace(/>/g, "&gt;");
             
-            // 2) Convert Markdown *emphasis* to SSML <emphasis> with controlled prosody
-            if (baseProsody) {
-                const emphasisProsody = getEmphasisProsody(baseProsody);
-                processed = processed.replace(/\*(.+?)\*/g, (_, inner) =>
-                    `<emphasis level="strong"><prosody ${emphasisProsody}>${inner.trim()}</prosody></emphasis>`
-                );
-            } else {
-                processed = processed.replace(/\*(.+?)\*/g, (_, inner) =>
-                    `<emphasis level="strong">${inner.trim()}</emphasis>`
-                );
-            }
+            // 2) Convert Markdown *emphasis* to SSML <emphasis>
+            // Use 'strong' emphasis as requested
+            processed = processed.replace(/\*(.+?)\*/g, (_, inner) =>
+                `<emphasis level="strong">${inner.trim()}</emphasis>`
+            );
 
-            // 3) Replace punctuation with breaks
-            processed = processed
-                // periods and end-of-sentence punctuation
-                .replace(/([.?!]+)\s*/g, `<break time="400ms"/>`)
-                // commas and small pauses
-                .replace(/(,)\s*/g, `<break time="200ms"/>`);
+            // 3) Replace punctuation with breaks - Klaus optimized
+            if (voiceName === 'de-DE-KlausNeural') {
+                // Klaus gets shorter, more natural pauses
+                processed = processed
+                    // periods and end-of-sentence punctuation - shorter for Klaus
+                    .replace(/([.?!]+)\s*/g, `<break time="300ms"/>`)
+                    // commas and small pauses - much shorter for Klaus
+                    .replace(/(,)\s*/g, `<break time="150ms"/>`);
+            } else {
+                // Katja keeps original timing
+                processed = processed
+                    // periods and end-of-sentence punctuation
+                    .replace(/([.?!]+)\s*/g, `<break time="400ms"/>`)
+                    // commas and small pauses
+                    .replace(/(,)\s*/g, `<break time="200ms"/>`);
+            }
 
             // 4) Return the processed text with breaks
             return processed.trim();
         }
         
-        // CAMBIO: buildSSMLTemplate maneja la ausencia de estilo
-        function buildSSMLTemplate(processedText, prosody, voiceName, style = null) {
-            const content = `<prosody rate="${prosody.rate}" pitch="${prosody.pitch}" volume="${prosody.volume}">${processedText}</prosody>`;
-
-            let styledContent;
-            if (style && style.style) {
-                // Si hay un estilo, lo aplicamos
-                styledContent = `<mstts:express-as style="${style.style}" styledegree="${style.degree}">${content}</mstts:express-as>`;
+        // SSML template builder (voice-specific optimizations)
+        function buildSSMLTemplate(processedText, prosody, voiceName) {
+            // Klaus Neural optimized for warm, natural conversation with improved flow
+            if (voiceName === 'de-DE-KlausNeural') {
+                return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
+  <voice name="${voiceName}">
+    <mstts:express-as style="friendly" styledegree="0.7">
+      <prosody rate="${prosody.rate}" pitch="${prosody.pitch}" volume="+2%">
+        ${processedText}
+      </prosody>
+    </mstts:express-as>
+  </voice>
+</speak>`;
             } else {
-                // Si no, usamos el contenido sin el wrapper de estilo
-                styledContent = content;
+                // Katja Neural (default configuration)
+                return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
+  <voice name="${voiceName}">
+    <mstts:express-as style="chat" styledegree="0.8">
+      <prosody rate="${prosody.rate}" pitch="${prosody.pitch}">
+        ${processedText}
+      </prosody>
+    </mstts:express-as>
+  </voice>
+</speak>`;
             }
-
-            return `<speak version="1.0" xml:lang="de-DE" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts">
-        <voice name="${voiceName}">
-            ${styledContent}
-        </voice>
-    </speak>`;
         }
         
         // Enhanced SSML validation
@@ -654,21 +525,6 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
                     ssmlSource: 'Cached Audio',
                     detectedLevel: detectedLevel,
                     appliedLevel: userCEFRLevel,
-                    // Enhanced voice context information
-                    voiceContext: {
-                        currentVoice: selectedVoice,
-                        currentVoiceName: availableVoices[selectedVoice]?.name,
-                        voiceChanged: voiceChangeInfo.hasChanged,
-                        previousVoice: voiceChangeInfo.previousVoice,
-                        previousVoiceName: voiceChangeInfo.previousName
-                    },
-                    // Message metadata for conversation history
-                    messageMetadata: {
-                        voiceUsed: selectedVoice,
-                        voiceName: availableVoices[selectedVoice]?.name,
-                        gender: availableVoices[selectedVoice]?.gender,
-                        timestamp: new Date().toISOString()
-                    },
                     tokenCalculation: {
                         inputTokens: estimateTokens(transcript),
                         allocatedTokens: dynamicMaxTokens,
@@ -686,80 +542,52 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             return;
         }
         
-        // NUEVO: Función orquestadora principal que divide el texto en fragmentos
-        function generateSSMLChunks(text, cefrLevel, voiceName) {
-            const totalDuration = estimateDuration(text);
-            if (totalDuration <= MAX_SECONDS_PER_CHUNK) {
-                // Si el texto es corto, procesarlo como uno solo y devolverlo en un array
-                return [generateSingleEnhancedSSML(text, cefrLevel, voiceName)];
-            }
+        // Generate natural SSML with user's confirmed CEFR level and selected voice
+        const ssml = generateNaturalSSML(cleanTextResponse, userCEFRLevel, selectedVoice);
 
-            const ssmlChunks = [];
-            // Dividimos el texto por frases para hacer cortes naturales
-            const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-            let currentChunk = "";
-
-            for (const sentence of sentences) {
-                const potentialChunk = currentChunk + " " + sentence;
-                if (estimateDuration(potentialChunk) > MAX_SECONDS_PER_CHUNK && currentChunk) {
-                    // El fragmento actual está lleno, lo procesamos
-                    ssmlChunks.push(generateSingleEnhancedSSML(currentChunk, cefrLevel, voiceName));
-                    // Empezamos un nuevo fragmento con la frase actual
-                    currentChunk = sentence;
-                } else {
-                    // Añadimos la frase al fragmento actual
-                    currentChunk = potentialChunk.trim();
-                }
-            }
-
-            // No olvidar procesar el último fragmento restante
-            if (currentChunk) {
-                ssmlChunks.push(generateSingleEnhancedSSML(currentChunk, cefrLevel, voiceName));
-            }
-
-            return ssmlChunks;
-        }
-        
-        // RENOMBRADA: La función original ahora procesa un único fragmento
-        function generateSingleEnhancedSSML(text, cefrLevel, voiceName) {
-            const textAnalysis = analyzeText(text);
-            const mainProsody = calculateProsody(textAnalysis, cefrLevel, 0, voiceName);
-            const voiceStyle = selectVoiceStyle(textAnalysis);
-            const processedText = processTextForSSML(text, cefrLevel, voiceName, mainProsody);
-            const finalSSML = buildSSMLTemplate(processedText, mainProsody, voiceName, voiceStyle);
-            return finalSSML;
-        }
-        
-        // Generate enhanced SSML with chunking support
-        const ssmlChunks = generateSSMLChunks(cleanTextResponse, userCEFRLevel, selectedVoice);
-        
-        // For compatibility, use the first chunk if it's a single chunk
-        const ssml = ssmlChunks[0];
-        
-        // Enhanced SSML generator with fallback compatibility
+        // Main SSML generator (refactored with modules)
         function generateNaturalSSML(text, cefrLevel = 'B1', voiceName = 'de-DE-KatjaNeural') {
             try {
-                // Use the new enhanced system
-                return generateSingleEnhancedSSML(text, cefrLevel, voiceName);
+                // 1. Analyze text patterns
+                const textAnalysis = analyzeText(text);
+                
+                // 2. Calculate prosody parameters with voice-specific optimization
+                const prosody = calculateProsody(textAnalysis, cefrLevel, 0, voiceName);
+                
+                // 3. Process text for SSML (emphasis + pauses)
+                const processedText = processTextForSSML(text, cefrLevel, voiceName);
+                
+                // 4. Build SSML template with selected voice
+                const ssml = buildSSMLTemplate(processedText, prosody, voiceName);
+                
+                // 5. Validate SSML
+                if (!validateSSML(ssml)) {
+                    context.log('SSML validation failed, using fallback');
+                    return generateMinimalSSML(text, voiceName);
+                }
+                
+                context.log(`Generated CEFR-adapted SSML - Voice: ${voiceName}, Level: ${cefrLevel}, Rate: ${prosody.rate}, Pitch: ${prosody.pitch}, Analysis: ${JSON.stringify(textAnalysis)}`);
+                return ssml;
+                
             } catch (error) {
-                context.log(`Enhanced SSML generation failed: ${error.message}, using minimal fallback`);
+                context.log(`Modular SSML generation failed: ${error.message}, using minimal fallback`);
                 return generateMinimalSSML(text, voiceName);
             }
         }
 
-        // Minimal fallback SSML (ultra-safe) - Updated to match new template structure
+        // Minimal fallback SSML (ultra-safe)
         function generateMinimalSSML(response, voiceName = 'de-DE-KatjaNeural') {
             // Clean text of any problematic characters
             const cleanText = response.replace(/[<>&"']/g, '');
-            return `<speak version="1.0" xml:lang="de-DE" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts">
-        <voice name="${voiceName}">
-            <mstts:express-as style="chat" styledegree="0.8">
-                <prosody rate="+0%" pitch="+0%" volume="+0%">
-                    ${cleanText}
-                </prosody>
-            </mstts:express-as>
-        </voice>
-    </speak>`;
+            return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts">
+  <voice name="${voiceName}">
+    <mstts:express-as style="chat" styledegree="0.8">
+      <prosody rate="+0%" pitch="+0%">
+        ${cleanText}
+      </prosody>
+    </mstts:express-as>
+  </voice>
+</speak>`;
         }
 
         // STEP 3: Generate TTS audio with retry protection
@@ -818,26 +646,10 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
                 voiceUsed: selectedVoice,
                 sessionId: `voice_${Date.now()}`,
                 timestamp: new Date().toISOString(),
-                pipeline: 'GPT-4o + CEFR-Adaptive SSML + Enhanced Voice Context v3.0',
+                pipeline: 'GPT-4o + CEFR-Adaptive SSML + Katja TTS v2.0',
                 ssmlSource: 'Modular CEFR-Aware Engine',
                 detectedLevel: detectedLevel, // AI-detected from response
                 appliedLevel: userCEFRLevel,  // Actually used for TTS generation
-                // Enhanced voice context information
-                voiceContext: {
-                    currentVoice: selectedVoice,
-                    currentVoiceName: availableVoices[selectedVoice]?.name,
-                    voiceChanged: voiceChangeInfo.hasChanged,
-                    previousVoice: voiceChangeInfo.previousVoice,
-                    previousVoiceName: voiceChangeInfo.previousName,
-                    transitionHandled: voiceChangeInfo.hasChanged
-                },
-                // Message metadata for conversation history
-                messageMetadata: {
-                    voiceUsed: selectedVoice,
-                    voiceName: availableVoices[selectedVoice]?.name,
-                    gender: availableVoices[selectedVoice]?.gender,
-                    timestamp: new Date().toISOString()
-                },
                 tokenCalculation: {
                     inputTokens: estimateTokens(transcript),
                     allocatedTokens: dynamicMaxTokens,
@@ -852,15 +664,13 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
                     styledegree: '0.8',
                     adaptivePauses: true,
                     naturalVariation: true,
-                    retryProtection: true,
-                    voiceTransition: voiceChangeInfo.hasChanged
+                    retryProtection: true
                 },
                 performance: {
                     hasAudio: !!audioData,
                     audioSize: audioData ? Math.round(audioData.length * 0.75) : 0, // Approximate bytes
                     ssmlValidated: true,
                     cacheHit: false,
-                    voiceContextProcessed: true,
                     cacheStats: {
                         userProfiles: CacheService.getUserProfileStats(),
                         ttsAudio: CacheService.getTTSCacheStats()
