@@ -233,7 +233,7 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
         const selectedVoice = req.body.voiceId || 'de-DE-KatjaNeural';
         const availableVoices = {
             'de-DE-KatjaNeural': { name: 'Katja', gender: 'female', description: 'Amigable y educativa' },
-            'de-DE-KlausNeural': { name: 'Klaus', gender: 'male', description: 'Natural y cálido' }
+            'de-DE-FlorianMultilingualNeural': { name: 'Florian', gender: 'male', description: 'Natural y expresivo' }
         };
         
         // Validate voice selection
@@ -340,13 +340,13 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             let rateValue = baseRates[cefrLevel] ?? 10; // Default to B1 if unknown
             
             // 2. Voice-specific adjustments for naturalness
-            if (voiceName === 'de-DE-KlausNeural') {
-                // Klaus Neural v2: more human-like speed adjustments
-                rateValue += 1; // Reduced from +3 to +1 for more natural pace
-                if (textAnalysis.isQuestion) rateValue += 1; // Reduced from +2 to +1
-                if (textAnalysis.isShort) rateValue += 2; // Reduced from +3 to +2
-                if (textAnalysis.isCorrection) rateValue -= 1; // Slower for corrections
-                if (textAnalysis.isLong) rateValue -= 2; // Slower for long texts
+            if (voiceName === 'de-DE-FlorianMultilingualNeural') {
+                // Florian Multilingual: optimized for natural conversation
+                rateValue += 2; // Slightly faster than base for responsiveness
+                if (textAnalysis.isQuestion) rateValue += 1; // Natural question pace
+                if (textAnalysis.isShort) rateValue += 2; // Quick responses
+                if (textAnalysis.isCorrection) rateValue -= 2; // Slower for corrections
+                if (textAnalysis.isLong) rateValue -= 1; // Moderate for long texts
             }
             
             // 3. Contextual adjustments
@@ -365,20 +365,20 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
             
             // 6. Voice-specific pitch optimization  
             let pitch = "+0%";
-            if (voiceName === 'de-DE-KlausNeural') {
-                // Klaus Neural v2: more expressive and human pitch
+            if (voiceName === 'de-DE-FlorianMultilingualNeural') {
+                // Florian Multilingual: warm, natural pitch variations
                 if (textAnalysis.isCorrection) {
-                    pitch = "+0.8%"; // Gentle correction tone
+                    pitch = "+1.2%"; // Gentle but clear correction tone
                 } else if (textAnalysis.isQuestion) {
-                    pitch = `+${2.0 + Math.random() * 1.5}%`; // 2.0-3.5% variable questions
+                    pitch = `+${1.8 + Math.random() * 1.2}%`; // 1.8-3.0% for questions
                 } else if (textAnalysis.hasEmphasis) {
-                    pitch = `+${1.5 + Math.random() * 2.0}%`; // 1.5-3.5% for emphasis
+                    pitch = `+${2.0 + Math.random() * 1.5}%`; // 2.0-3.5% for emphasis
                 } else if (textAnalysis.isShort) {
-                    pitch = `+${0.5 + Math.random() * 1.0}%`; // 0.5-1.5% for short answers
+                    pitch = `+${0.8 + Math.random() * 0.8}%`; // 0.8-1.6% for short answers
                 } else {
-                    // Natural variation 60% of the time
-                    if (Math.random() < 0.6) {
-                        pitch = `${-0.5 + Math.random() * 2.0}%`; // -0.5% to +1.5%
+                    // Natural variation 70% of the time (more frequent than Klaus)
+                    if (Math.random() < 0.7) {
+                        pitch = `${-0.3 + Math.random() * 1.8}%`; // -0.3% to +1.5%
                     }
                 }
             } else {
@@ -389,12 +389,12 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
 
             // 7. Volume calculation
             let volumeValue = 0; // Default to +0%
-            if (voiceName === 'de-DE-KlausNeural') {
-                // Klaus Neural v2: more expressive volume
-                if (textAnalysis.hasEmphasis) volumeValue += 4; // Stronger for emphasis
-                else if (textAnalysis.isQuestion) volumeValue += 2; // Clearer for questions
-                else if (textAnalysis.isCorrection) volumeValue -= 1; // Softer for corrections
-                else if (Math.random() < 0.3) volumeValue += Math.random() * 2; // Subtle variation
+            if (voiceName === 'de-DE-FlorianMultilingualNeural') {
+                // Florian Multilingual: balanced, clear volume
+                if (textAnalysis.hasEmphasis) volumeValue += 3; // Clear emphasis without harshness
+                else if (textAnalysis.isQuestion) volumeValue += 1.5; // Slightly raised for questions
+                else if (textAnalysis.isCorrection) volumeValue += 0.5; // Warm but clear corrections
+                else if (Math.random() < 0.4) volumeValue += Math.random() * 1.5; // Gentle variation
             } else {
                 // Katja Neural
                 if (textAnalysis.hasEmphasis) volumeValue += 4; // More pronounced for emphasis
@@ -444,18 +444,18 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
                 `<emphasis level="strong">${inner.trim()}</emphasis>`
             );
 
-            // 3) Replace punctuation with breaks - Klaus optimized v2
-            if (voiceName === 'de-DE-KlausNeural') {
-                // Klaus v2: variable, natural pauses
+            // 3) Replace punctuation with breaks - Florian optimized
+            if (voiceName === 'de-DE-FlorianMultilingualNeural') {
+                // Florian: smooth, natural conversation pauses
                 processed = processed
-                    // Periods/exclamations: 220-320ms (safer than 180ms)
-                    .replace(/([.!]+)\s*/g, () => `<break time="${220 + Math.random() * 100}ms"/>`)
-                    // Questions: 250-370ms 
-                    .replace(/([?]+)\s*/g, () => `<break time="${250 + Math.random() * 120}ms"/>`)
-                    // Commas: 90-150ms (very natural)
-                    .replace(/(,)\s*/g, () => `<break time="${90 + Math.random() * 60}ms"/>`)
-                    // Semicolons/colons: 160-240ms
-                    .replace(/([;:]+)\s*/g, () => `<break time="${160 + Math.random() * 80}ms"/>`);
+                    // Periods/exclamations: 200-280ms (balanced)
+                    .replace(/([.!]+)\s*/g, () => `<break time="${200 + Math.random() * 80}ms"/>`)
+                    // Questions: 240-320ms (natural inquiry pause)
+                    .replace(/([?]+)\s*/g, () => `<break time="${240 + Math.random() * 80}ms"/>`)
+                    // Commas: 100-160ms (flowing)
+                    .replace(/(,)\s*/g, () => `<break time="${100 + Math.random() * 60}ms"/>`)
+                    // Semicolons/colons: 180-240ms (thoughtful)
+                    .replace(/([;:]+)\s*/g, () => `<break time="${180 + Math.random() * 60}ms"/>`);
             } else {
                 // Katja keeps original timing
                 processed = processed
@@ -471,13 +471,12 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
         
         // SSML template builder (voice-specific optimizations)
         function buildSSMLTemplate(processedText, prosody, voiceName) {
-            // Klaus Neural v2: safe style selection with fallback
-            if (voiceName === 'de-DE-KlausNeural') {
-                // Use safe 'chat' style (more supported than 'conversational')
-                const klausStyle = 'chat'; // Compatible with Klaus Neural
+            // Florian Multilingual: optimized for natural conversation
+            if (voiceName === 'de-DE-FlorianMultilingualNeural') {
+                // Use 'conversational' style (well supported by Multilingual voices)
                 return `<speak version="1.0" xml:lang="de-DE" xmlns:mstts="https://www.w3.org/2001/mstts" xml:base="https://tts.microsoft.com/language">
   <voice name="${voiceName}">
-    <mstts:express-as style="${klausStyle}" styledegree="0.8">
+    <mstts:express-as style="conversational" styledegree="0.9">
       <prosody rate="${prosody.rate}" pitch="${prosody.pitch}" volume="${prosody.volume}">
         ${processedText}
       </prosody>
