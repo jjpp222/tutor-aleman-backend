@@ -88,6 +88,8 @@ module.exports = async function (context, req) {
                     await downloadSessionPackage(context, req, corsHeaders);
                 } else if (segments.includes('transcript')) {
                     await getSessionTranscript(context, req, corsHeaders);
+                } else if (segments.includes('mixed-audio')) {
+                    await getMixedAudioUrl(context, req, corsHeaders);
                 } else {
                     throw new Error('Invalid GET endpoint');
                 }
@@ -401,6 +403,75 @@ async function streamToString(readableStream) {
         });
         readableStream.on('error', reject);
     });
+}
+
+async function getMixedAudioUrl(context, req, corsHeaders) {
+    const sessionId = req.query.sessionId;
+    
+    if (!sessionId) {
+        throw new Error('Missing sessionId parameter');
+    }
+
+    try {
+        // Get session from Cosmos DB
+        const querySpec = {
+            query: 'SELECT * FROM c WHERE c.sessionId = @sessionId',
+            parameters: [
+                { name: '@sessionId', value: sessionId }
+            ]
+        };
+        
+        const { resources } = await sessionsContainer.items.query(querySpec).fetchAll();
+        
+        if (resources.length === 0) {
+            throw new Error('Session not found');
+        }
+        
+        const session = resources[0];
+        
+        // Check if mixed audio is ready
+        if (!session.mixReady) {
+            throw new Error('Mixed audio not ready yet. Please try again later.');
+        }
+        
+        // Get mixed audio blob URL
+        const mixedAudioPath = `${session.userId}/${sessionId}/session_mix.mp3`;
+        const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
+        const mixedAudioBlobClient = containerClient.getBlobClient(mixedAudioPath);
+        
+        const exists = await mixedAudioBlobClient.exists();
+        if (!exists) {
+            throw new Error('Mixed audio file not found in storage');
+        }
+        
+        // Generate SAS URL for the mixed audio (valid for 1 hour)
+        const sasUrl = await mixedAudioBlobClient.generateSasUrl({
+            permissions: 'r', // read permission
+            expiresOn: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
+        });
+        
+        context.res = {
+            status: 200,
+            headers: corsHeaders,
+            body: {
+                success: true,
+                sessionId: sessionId,
+                audioUrl: sasUrl,
+                mixReady: true,
+                sessionInfo: {
+                    date: session.startedUtc,
+                    duration: session.duration,
+                    userLevel: session.userLevel,
+                    voicesUsed: session.voicesUsed,
+                    totalMessages: session.totalMessages
+                }
+            }
+        };
+
+    } catch (error) {
+        context.log(`Error retrieving mixed audio: ${error.message}`);
+        throw new Error(`Failed to retrieve mixed audio: ${error.message}`);
+    }
 }
 
 // === UTILITY FUNCTIONS ===
