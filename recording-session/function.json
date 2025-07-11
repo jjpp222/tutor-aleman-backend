@@ -6,7 +6,7 @@
       "direction": "in",
       "name": "req",
       "methods": ["get", "post", "put"],
-      "route": "conversation-session/{action?}"
+      "route": "recording-session/{action?}"
     },
     {
       "type": "http",
