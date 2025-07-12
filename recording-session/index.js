@@ -203,7 +203,7 @@ async function appendTurn(context, req, corsHeaders, userId) {
     while (attempts < maxAttempts && !session) {
         attempts++;
         try {
-            const { resource: result } = await sessionsContainer.item(sessionId, userId).read();
+            const { resource: result } = await sessionsContainer.item(sessionId, sessionId).read();
             session = result;
             if (session) {
                 context.log(`Session found on attempt ${attempts}:`, { id: session.id, status: session.status });
@@ -234,7 +234,7 @@ async function appendTurn(context, req, corsHeaders, userId) {
     }
 
     // Update session in Cosmos DB
-    await sessionsContainer.item(sessionId, userId).replace(session);
+    await sessionsContainer.item(sessionId, sessionId).replace(session);
 
     context.res = {
         status: 200,
@@ -258,7 +258,7 @@ async function endSession(context, req, corsHeaders, userId) {
     context.log(`Ending session: ${sessionId} for userId: ${userId}`);
 
     // Get session from Cosmos DB
-    const { resource: session } = await sessionsContainer.item(sessionId, userId).read();
+    const { resource: session } = await sessionsContainer.item(sessionId, sessionId).read();
     context.log(`Result of Cosmos DB read in endSession: ${JSON.stringify(session)}`); // <-- NUEVO LOG
 
     if (!session) {
@@ -286,7 +286,7 @@ async function endSession(context, req, corsHeaders, userId) {
     session.transcriptUrl = `${userId}/${sessionId}/transcript.json`;
 
     // Update session in Cosmos DB
-    await sessionsContainer.item(sessionId, userId).replace(session);
+    await sessionsContainer.item(sessionId, sessionId).replace(session);
 
     // Trigger mix-session function to create mixed audio (async - don't wait)
     try {
@@ -337,7 +337,7 @@ async function appendBotAudio(context, req, corsHeaders, userId) {
         context.log(`Bot audio data - Session: ${sessionId}, Text length: ${botText.length}, Audio size: ${fileData.length}`);
         
         // Verify session exists and belongs to user
-        const { resource: session } = await sessionsContainer.item(sessionId, userId).read();
+        const { resource: session } = await sessionsContainer.item(sessionId, sessionId).read();
         if (!session) {
             throw new Error('Session not found or access denied');
         }
@@ -368,7 +368,7 @@ async function appendBotAudio(context, req, corsHeaders, userId) {
             lastUpdated: new Date().toISOString()
         };
         
-        await sessionsContainer.item(sessionId, userId).replace(updatedSession);
+        await sessionsContainer.item(sessionId, sessionId).replace(updatedSession);
         
         context.res = {
             status: 200,
@@ -435,7 +435,7 @@ async function downloadSession(context, req, corsHeaders, userId) {
     context.log(`Downloading session: ${sessionId} for user: ${userId}`);
 
     // Get session from Cosmos DB
-    const { resource: session } = await sessionsContainer.item(sessionId, userId).read();
+    const { resource: session } = await sessionsContainer.item(sessionId, sessionId).read();
     
     if (!session) {
         throw new Error('Session not found');
