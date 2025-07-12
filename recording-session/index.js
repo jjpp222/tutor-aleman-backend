@@ -504,7 +504,7 @@ async function generateSASUrl(containerClient, blobPath, permissions, expiryTime
 
 async function triggerMixSession(sessionId, userId) {
     const mixSessionUrl = process.env.MIX_SESSION_FUNCTION_URL || 
-        `${process.env.AZURE_FUNCTION_BASE_URL || 'https://tutor-aleman-api-v2.azurewebsites.net'}/api/mix-session`;
+        `${process.env.AZURE_FUNCTION_BASE_URL || 'https://tutor-aleman-backend-v4.azurewebsites.net'}/api/mix-session`;
     
     const response = await fetch(mixSessionUrl, {
         method: 'POST',
