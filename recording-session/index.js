@@ -2,7 +2,7 @@ const { validateJWT } = require('../shared/auth');
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { CosmosClient } = require('@azure/cosmos');
 const { v4: uuidv4 } = require('uuid');
-const fs = require('fs');
+const fs = require('fs').promises;
 const fetch = require('node-fetch');
 
 // Configuración de Azure Storage
@@ -77,6 +77,8 @@ module.exports = async function (context, req) {
                     await startSession(context, req, corsHeaders, userId, userLevel);
                 } else if (segments.includes('append-bot-audio')) {
                     await appendBotAudio(context, req, corsHeaders, userId);
+                } else if (segments.includes('append-user-audio')) {
+                    await appendUserAudio(context, req, corsHeaders, userId);
                 } else if (segments.includes('append')) {
                     await appendTurn(context, req, corsHeaders, userId);
                 } else if (segments.includes('end')) {
@@ -278,10 +280,18 @@ async function endSession(context, req, corsHeaders, userId) {
     session.endedUtc = endTime.toISOString();
     session.duration = duration;
 
+    // Consolidate user audio chunks if they exist
+    if (session.userAudioChunks && session.userAudioChunks.length > 0) {
+        await consolidateUserAudio(userId, sessionId, session.userAudioChunks, context);
+    }
+    
     // Set audio URLs (mixed audio will be created by mix-session function)
     session.audioUrls = {
         mixed: `${userId}/${sessionId}/session_mix.mp3`,
-        bot: `${userId}/${sessionId}/session_bot.mp3`
+        bot: `${userId}/${sessionId}/session_bot.mp3`,
+        user: session.userAudioChunks && session.userAudioChunks.length > 0 
+            ? `${userId}/${sessionId}/session_user.mp3` 
+            : null
     };
     session.transcriptUrl = `${userId}/${sessionId}/transcript.json`;
 
@@ -523,4 +533,202 @@ async function triggerMixSession(sessionId, userId) {
     }
 
     return await response.json();
+}
+
+// ===== USER AUDIO MANAGEMENT =====
+async function appendUserAudio(context, req, corsHeaders, userId) {
+    try {
+        context.log('Appending user audio for user:', userId);
+        
+        // Extract multipart form data
+        const sessionId = req.body.sessionId;
+        const timestamp = req.body.timestamp;
+        const audioFile = req.body.audio; // This would be the audio chunk
+        
+        if (!sessionId || !audioFile) {
+            throw new Error('Missing required fields: sessionId or audio');
+        }
+        
+        context.log(`User audio data - Session: ${sessionId}, Timestamp: ${timestamp}, Audio size: ${audioFile.length || 'unknown'}`);
+        
+        // Get session from Cosmos DB to verify it exists and is active
+        const { resource: session } = await sessionsContainer.item(sessionId, sessionId).read();
+        
+        if (!session || session.status === 'completed') {
+            throw new Error('Session not found or already completed');
+        }
+        
+        // Upload audio chunk to Azure Storage
+        const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
+        const userAudioPath = `${userId}/${sessionId}/user_chunks/chunk_${timestamp}.webm`;
+        const blockBlobClient = containerClient.getBlockBlobClient(userAudioPath);
+        
+        // Upload the audio chunk
+        await blockBlobClient.upload(audioFile, audioFile.length, {
+            blobHTTPHeaders: {
+                blobContentType: 'audio/webm'
+            }
+        });
+        
+        context.log(`✅ User audio chunk uploaded: ${userAudioPath}`);
+        
+        // Update session with user audio info (keep track of chunks)
+        if (!session.userAudioChunks) {
+            session.userAudioChunks = [];
+        }
+        session.userAudioChunks.push({
+            path: userAudioPath,
+            timestamp: timestamp,
+            size: audioFile.length || 0
+        });
+        session.lastActivity = new Date().toISOString();
+        
+        // Update session in Cosmos DB
+        await sessionsContainer.item(sessionId, sessionId).replace(session);
+        
+        context.res = {
+            status: 200,
+            headers: corsHeaders,
+            body: {
+                success: true,
+                message: 'User audio chunk saved successfully',
+                chunkPath: userAudioPath
+            }
+        };
+        
+    } catch (error) {
+        context.log.error('Error appending user audio:', error);
+        
+        context.res = {
+            status: 500,
+            headers: corsHeaders,
+            body: {
+                success: false,
+                error: error.message
+            }
+        };
+    }
+}
+
+// ===== USER AUDIO CONSOLIDATION =====
+async function consolidateUserAudio(userId, sessionId, userAudioChunks, context) {
+    try {
+        context.log(`🔧 Consolidating ${userAudioChunks.length} user audio chunks for session: ${sessionId}`);
+        
+        if (!userAudioChunks || userAudioChunks.length === 0) {
+            context.log('⚠️ No user audio chunks to consolidate');
+            return;
+        }
+        
+        const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
+        const tempFiles = [];
+        
+        // Sort chunks by timestamp to maintain correct order
+        const sortedChunks = userAudioChunks.sort((a, b) => parseInt(a.timestamp) - parseInt(b.timestamp));
+        
+        // Download all chunks to temporary files
+        for (let i = 0; i < sortedChunks.length; i++) {
+            const chunk = sortedChunks[i];
+            const tempFile = `/tmp/user_chunk_${i}.webm`;
+            
+            try {
+                const blobClient = containerClient.getBlockBlobClient(chunk.path);
+                const downloadResponse = await blobClient.download();
+                const chunks = [];
+                
+                downloadResponse.readableStreamBody.on('data', (data) => {
+                    chunks.push(data);
+                });
+                
+                await new Promise((resolve, reject) => {
+                    downloadResponse.readableStreamBody.on('end', resolve);
+                    downloadResponse.readableStreamBody.on('error', reject);
+                });
+                
+                const buffer = Buffer.concat(chunks);
+                await fs.writeFile(tempFile, buffer);
+                tempFiles.push(tempFile);
+                
+                context.log(`📥 Downloaded chunk ${i}: ${chunk.path} -> ${tempFile}`);
+                
+            } catch (error) {
+                context.log.error(`❌ Failed to download chunk ${chunk.path}:`, error.message);
+            }
+        }
+        
+        if (tempFiles.length === 0) {
+            context.log('❌ No chunks were successfully downloaded');
+            return;
+        }
+        
+        // Create FFmpeg concat file
+        const concatFile = '/tmp/concat.txt';
+        const concatContent = tempFiles.map(file => `file '${file}'`).join('\n');
+        await fs.writeFile(concatFile, concatContent);
+        
+        // Use FFmpeg to concatenate and normalize to MP3
+        const outputFile = '/tmp/session_user.mp3';
+        const ffmpegPath = '/usr/bin/ffmpeg'; // Azure Functions has ffmpeg available
+        
+        await new Promise((resolve, reject) => {
+            const { spawn } = require('child_process');
+            const ffmpeg = spawn(ffmpegPath, [
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', concatFile,
+                '-c:a', 'mp3',
+                '-ar', '48000',      // Normalize sample rate
+                '-ab', '128k',       // Audio bitrate
+                '-ac', '1',          // Mono audio
+                '-y',                // Overwrite output
+                outputFile
+            ]);
+            
+            ffmpeg.on('close', (code) => {
+                if (code === 0) {
+                    resolve();
+                } else {
+                    reject(new Error(`FFmpeg exited with code ${code}`));
+                }
+            });
+            
+            ffmpeg.on('error', reject);
+        });
+        
+        // Upload consolidated file to storage
+        const consolidatedPath = `${userId}/${sessionId}/session_user.mp3`;
+        const consolidatedBlobClient = containerClient.getBlockBlobClient(consolidatedPath);
+        
+        const fileBuffer = await fs.readFile(outputFile);
+        await consolidatedBlobClient.upload(fileBuffer, fileBuffer.length, {
+            blobHTTPHeaders: {
+                blobContentType: 'audio/mpeg'
+            }
+        });
+        
+        context.log(`✅ User audio consolidated: ${consolidatedPath}`);
+        
+        // Cleanup temporary files
+        for (const tempFile of [...tempFiles, concatFile, outputFile]) {
+            try {
+                await fs.unlink(tempFile);
+            } catch (error) {
+                context.log(`⚠️ Failed to cleanup ${tempFile}:`, error.message);
+            }
+        }
+        
+        // Optionally cleanup chunk files from storage to save space
+        for (const chunk of userAudioChunks) {
+            try {
+                const chunkBlobClient = containerClient.getBlockBlobClient(chunk.path);
+                await chunkBlobClient.delete();
+            } catch (error) {
+                context.log(`⚠️ Failed to cleanup chunk ${chunk.path}:`, error.message);
+            }
+        }
+        
+    } catch (error) {
+        context.log.error('❌ Failed to consolidate user audio:', error.message);
+        throw error;
+    }
 }
