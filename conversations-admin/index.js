@@ -285,6 +285,15 @@ async function downloadSessionPackage(context, req, corsHeaders) {
                 expiresOn: sasExpiry
             });
             downloadUrls[file.name] = sasUrl;
+            
+            // Add specific URLs for frontend compatibility
+            if (file.name.includes('user')) {
+                downloadUrls.userAudio = sasUrl;
+            } else if (file.name.includes('bot')) {
+                downloadUrls.botAudio = sasUrl;
+            } else if (file.name.includes('mix')) {
+                downloadUrls.mixedAudio = sasUrl;
+            }
         } catch (error) {
             context.log(`Failed to generate SAS for ${file.name}: ${error.message}`);
         }
