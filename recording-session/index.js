@@ -359,8 +359,40 @@ async function appendBotAudio(context, req, corsHeaders, userId) {
         const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
         const blobClient = containerClient.getBlockBlobClient(audioPath);
         
-        // Upload the audio file
-        await blobClient.upload(fileData, fileData.length, {
+        // Check if bot audio file already exists (continuous recording)
+        let existingAudio = null;
+        try {
+            const downloadResponse = await blobClient.download();
+            const chunks = [];
+            
+            downloadResponse.readableStreamBody.on('data', (data) => {
+                chunks.push(data);
+            });
+            
+            await new Promise((resolve, reject) => {
+                downloadResponse.readableStreamBody.on('end', resolve);
+                downloadResponse.readableStreamBody.on('error', reject);
+            });
+            
+            existingAudio = Buffer.concat(chunks);
+            context.log(`📥 Found existing bot audio: ${existingAudio.length} bytes`);
+            
+        } catch (error) {
+            context.log(`📝 No existing bot audio found, creating new file`);
+        }
+        
+        // Combine existing + new audio (simple concatenation for MP3)
+        let finalAudio;
+        if (existingAudio) {
+            finalAudio = Buffer.concat([existingAudio, fileData]);
+            context.log(`🔗 Combined audio: ${existingAudio.length} + ${fileData.length} = ${finalAudio.length} bytes`);
+        } else {
+            finalAudio = fileData;
+            context.log(`🆕 New bot audio file: ${finalAudio.length} bytes`);
+        }
+        
+        // Upload the combined audio file
+        await blobClient.upload(finalAudio, finalAudio.length, {
             blobHTTPHeaders: {
                 blobContentType: 'audio/mpeg'
             }
