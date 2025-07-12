@@ -195,9 +195,12 @@ async function appendTurn(context, req, corsHeaders, userId) {
     context.log(`Appending turn to session: ${sessionId}, speaker: ${speaker}`);
 
     // Get session from Cosmos DB
+    context.log(`Attempting to read session: ${sessionId} with userId: ${userId}`);
     const { resource: session } = await sessionsContainer.item(sessionId, userId).read();
+    context.log(`Session read result:`, session ? { id: session.id, status: session.status, userId: session.userId } : 'NULL');
     
     if (!session || session.status !== 'active') {
+        context.log.error(`Session validation failed - Session exists: ${!!session}, Status: ${session?.status}`);
         throw new Error('Session not found or not active');
     }
 
