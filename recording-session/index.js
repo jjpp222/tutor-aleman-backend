@@ -24,7 +24,7 @@ module.exports = async function (context, req) {
     const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-ms-version, x-ms-date',
         'Content-Type': 'application/json'
     };
 
@@ -122,11 +122,37 @@ module.exports = async function (context, req) {
 
 async function startSession(context, req, corsHeaders, userId, userLevel) {
     context.log(`Starting new session for user: ${userId}`);
-    context.log(`User ID from token in startSession: ${userId}`); // <-- NUEVO LOG
     
     const sessionId = `sess_${Date.now()}_${userId}_${uuidv4().substring(0, 8)}`;
     const startTime = new Date().toISOString();
-    
+
+    const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
+    await containerClient.createIfNotExists();
+
+    // Detect audio type by User-Agent (approximation)
+    const userAgent = req.headers['user-agent'] || '';
+    const isSafari = userAgent.includes('Safari') && !userAgent.includes('Chrome');
+    const audioExtension = isSafari ? 'mp4' : 'webm';
+    const audioMimeType = isSafari ? 'audio/mp4' : 'audio/webm';
+
+    // Create AppendBlobs
+    const userAudioPath = `${userId}/${sessionId}/session_user.${audioExtension}`;
+    const botAudioPath = `${userId}/${sessionId}/session_bot.mp3`;
+
+    const userBlobClient = containerClient.getAppendBlobClient(userAudioPath);
+    const botBlobClient = containerClient.getAppendBlobClient(botAudioPath);
+
+    // Create blobs only if they do not exist
+    await userBlobClient.createIfNotExists({
+        blobHTTPHeaders: { blobContentType: audioMimeType }
+    });
+
+    await botBlobClient.createIfNotExists({
+        blobHTTPHeaders: { blobContentType: 'audio/mpeg' }
+    });
+
+    context.log(`Created AppendBlobs - User: ${audioExtension}, Bot: mp3`);
+
     // Create session document in Cosmos DB
     const sessionDoc = {
         id: sessionId,
@@ -140,36 +166,24 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
         totalMessages: 0,
         duration: 0,
         audioUrls: {
-            user: null,
-            bot: null
+            user: userAudioPath, // Store path from the start
+            bot: botAudioPath
         },
-        transcriptUrl: null,
+        userAudioFormat: audioExtension, // Store format for mix-session
+        transcriptUrl: `${userId}/${sessionId}/transcript.json`,
         createdAt: startTime
     };
 
-    try {
-        await sessionsContainer.items.create(sessionDoc, { partitionKey: userId });
-        context.log(`Session document created: ${sessionId}`);
-    } catch (error) {
-        context.log.error(`Failed to create session document: ${error.message}`);
-        throw new Error('Failed to initialize session');
-    }
+    await sessionsContainer.items.create(sessionDoc, { partitionKey: userId });
+    context.log(`Session document created: ${sessionId}`);
 
-    // Generate SAS URIs for file uploads
-    const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
-    
-    // Ensure container exists
-    await containerClient.createIfNotExists();
-    
+    // Generate SAS URLs for uploads
     const sasExpiry = new Date();
     sasExpiry.setHours(sasExpiry.getHours() + 2); // 2 hours expiry
-    
-    const botAudioPath = `${userId}/${sessionId}/session_bot.mp3`;
-    const transcriptPath = `${userId}/${sessionId}/transcript.json`;
-    
-    // Generate SAS URLs for uploads (only transcript needed in new system)
-    const botAudioSAS = await generateSASUrl(containerClient, botAudioPath, 'w', sasExpiry);
-    const transcriptSAS = await generateSASUrl(containerClient, transcriptPath, 'w', sasExpiry);
+
+    const userAudioSAS = await generateSASUrl(containerClient, userAudioPath, 'acw', sasExpiry); // Append, Create, Write
+    const botAudioSAS = await generateSASUrl(containerClient, botAudioPath, 'acw', sasExpiry);
+    const transcriptSAS = await generateSASUrl(containerClient, sessionDoc.transcriptUrl, 'w', sasExpiry);
 
     context.res = {
         status: 200,
@@ -178,9 +192,11 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
             success: true,
             sessionId: sessionId,
             uploadUrls: {
+                userAudio: userAudioSAS,
                 botAudio: botAudioSAS,
                 transcript: transcriptSAS
             },
+            audioFormat: audioExtension,
             expiresAt: sasExpiry.toISOString(),
             message: 'Session started successfully'
         }
@@ -261,14 +277,11 @@ async function endSession(context, req, corsHeaders, userId) {
 
     // Get session from Cosmos DB
     const { resource: session } = await sessionsContainer.item(sessionId, sessionId).read();
-    context.log(`Result of Cosmos DB read in endSession: ${JSON.stringify(session)}`); // <-- NUEVO LOG
 
     if (!session) {
         context.log.error(`Session not found for sessionId: ${sessionId} and userId: ${userId}`);
         throw new Error('Session not found');
     }
-
-    context.log(`Found session with studentId: ${session.studentId}`);
 
     // Calculate duration
     const startTime = new Date(session.startedUtc);
@@ -276,35 +289,44 @@ async function endSession(context, req, corsHeaders, userId) {
     const duration = Math.floor((endTime - startTime) / 1000); // seconds
 
     // Update session as completed
-    session.status = 'uploading';
+    session.status = 'completed'; // Mark as completed
     session.endedUtc = endTime.toISOString();
     session.duration = duration;
 
-    // Consolidate user audio chunks if they exist
-    if (session.userAudioChunks && session.userAudioChunks.length > 0) {
-        await consolidateUserAudio(userId, sessionId, session.userAudioChunks, context);
-    }
+    // Verify final audio files existence
+    const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
+    let userAudioPath = null;
     
-    // Set audio URLs (mixed audio will be created by mix-session function)
+    // The user audio format is already stored in the session document
+    const userAudioFormat = session.userAudioFormat || 'webm';
+    const potentialUserAudioPath = `${userId}/${sessionId}/session_user.${userAudioFormat}`;
+    
+    if (await containerClient.getAppendBlobClient(potentialUserAudioPath).exists()) {
+        userAudioPath = potentialUserAudioPath;
+    }
+
+    const botAudioPath = `${userId}/${sessionId}/session_bot.mp3`;
+    const botBlobExists = await containerClient.getAppendBlobClient(botAudioPath).exists();
+
+    context.log(`Audio files check - User: ${userAudioPath || 'none'}, Bot: ${botBlobExists}`);
+
+    // Update audio URLs in session document
     session.audioUrls = {
-        mixed: `${userId}/${sessionId}/session_mix.mp3`,
-        bot: `${userId}/${sessionId}/session_bot.mp3`,
-        user: session.userAudioChunks && session.userAudioChunks.length > 0 
-            ? `${userId}/${sessionId}/session_user.mp3` 
-            : null
+        user: userAudioPath,
+        bot: botBlobExists ? botAudioPath : null,
+        mixed: `${userId}/${sessionId}/session_mix.mp3`
     };
-    session.transcriptUrl = `${userId}/${sessionId}/transcript.json`;
 
     // Update session in Cosmos DB
     await sessionsContainer.item(sessionId, sessionId).replace(session);
 
-    // Trigger mix-session function to create mixed audio (async - don't wait)
+    // Trigger mix-session function (fire and forget)
     try {
         await triggerMixSession(sessionId, userId);
         context.log(`Mix session triggered for: ${sessionId}`);
     } catch (error) {
         context.log.error(`Failed to trigger mix session: ${error.message}`);
-        // Don't fail the session ending if mix fails
+        // Do not fail the session ending if mix trigger fails
     }
 
     context.res = {
@@ -315,123 +337,59 @@ async function endSession(context, req, corsHeaders, userId) {
             sessionId: sessionId,
             duration: duration,
             totalMessages: session.totalMessages,
-            message: 'Session ended successfully'
+            message: 'Session ended successfully and mix process initiated'
         }
     };
 }
 
 async function appendBotAudio(context, req, corsHeaders, userId) {
     try {
-        context.log('Appending bot audio for user:', userId);
-        
-        // Parse form data from Azure Functions request
-        const sessionId = req.body.sessionId;
-        const botText = req.body.botText;
-        const timestamp = req.body.timestamp;
-        const audioBlob = req.body.audio; // Should be base64 or buffer
-        
-        if (!sessionId || !botText || !audioBlob) {
-            throw new Error('Missing required fields: sessionId, botText, or audio');
+        const { sessionId, botText, audio } = req.body;
+
+        if (!sessionId || !audio) {
+            throw new Error('Missing required fields: sessionId, audio');
         }
-        
-        // Convert audio data to buffer
-        let fileData;
-        if (typeof audioBlob === 'string') {
-            // Base64 string
-            fileData = Buffer.from(audioBlob, 'base64');
-        } else {
-            // Already a buffer
-            fileData = audioBlob;
+
+        // Convert audio to buffer
+        const fileData = Buffer.from(audio, 'base64');
+
+        context.log(`Bot audio - Session: ${sessionId}, Size: ${fileData.length} bytes`);
+
+        // Verify block size limit (4MB)
+        if (fileData.length > 4 * 1024 * 1024) {
+            throw new Error('Audio chunk too large for AppendBlob (>4MB)');
         }
-        
-        context.log(`Bot audio data - Session: ${sessionId}, Text length: ${botText.length}, Audio size: ${fileData.length}`);
-        
-        // Verify session exists and belongs to user
-        const { resource: session } = await sessionsContainer.item(sessionId, sessionId).read();
-        if (!session) {
-            throw new Error('Session not found or access denied');
-        }
-        
-        // Create audio file path
+
+        // Append to existing blob
         const audioPath = `${userId}/${sessionId}/session_bot.mp3`;
-        
-        // Upload audio to Azure Blob Storage
         const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
-        const blobClient = containerClient.getBlockBlobClient(audioPath);
-        
-        // Check if bot audio file already exists (continuous recording)
-        let existingAudio = null;
-        try {
-            const downloadResponse = await blobClient.download();
-            const chunks = [];
-            
-            downloadResponse.readableStreamBody.on('data', (data) => {
-                chunks.push(data);
-            });
-            
-            await new Promise((resolve, reject) => {
-                downloadResponse.readableStreamBody.on('end', resolve);
-                downloadResponse.readableStreamBody.on('error', reject);
-            });
-            
-            existingAudio = Buffer.concat(chunks);
-            context.log(`📥 Found existing bot audio: ${existingAudio.length} bytes`);
-            
-        } catch (error) {
-            context.log(`📝 No existing bot audio found, creating new file`);
-        }
-        
-        // Combine existing + new audio (simple concatenation for MP3)
-        let finalAudio;
-        if (existingAudio) {
-            finalAudio = Buffer.concat([existingAudio, fileData]);
-            context.log(`🔗 Combined audio: ${existingAudio.length} + ${fileData.length} = ${finalAudio.length} bytes`);
-        } else {
-            finalAudio = fileData;
-            context.log(`🆕 New bot audio file: ${finalAudio.length} bytes`);
-        }
-        
-        // Upload the combined audio file
-        await blobClient.upload(finalAudio, finalAudio.length, {
-            blobHTTPHeaders: {
-                blobContentType: 'audio/mpeg'
-            }
-        });
-        
-        context.log(`Bot audio uploaded to: ${audioPath}`);
-        
-        // Update session metadata
-        const updatedSession = {
-            ...session,
-            audioUrls: {
-                ...session.audioUrls,
-                bot: audioPath
-            },
-            lastUpdated: new Date().toISOString()
-        };
-        
-        await sessionsContainer.item(sessionId, sessionId).replace(updatedSession);
-        
+        const appendBlobClient = containerClient.getAppendBlobClient(audioPath);
+
+        await appendBlobClient.appendBlock(fileData, fileData.length);
+
+        context.log(`✅ Bot audio appended: ${fileData.length} bytes to ${audioPath}`);
+
+        // Update session last activity timestamp
+        const { resource: session } = await sessionsContainer.item(sessionId, sessionId).read();
+        session.lastActivity = new Date().toISOString();
+        await sessionsContainer.item(sessionId, sessionId).replace(session);
+
         context.res = {
             status: 200,
             headers: corsHeaders,
             body: {
                 success: true,
-                message: 'Bot audio saved successfully',
-                audioPath: audioPath
+                message: 'Bot audio appended successfully',
+                bytesAppended: fileData.length
             }
         };
-        
+
     } catch (error) {
-        context.log.error('Error appending bot audio:', error);
-        
+        context.log.error('❌ Error appending bot audio:', error);
         context.res = {
             status: 500,
             headers: corsHeaders,
-            body: {
-                success: false,
-                error: error.message || 'Failed to save bot audio'
-            }
+            body: { success: false, error: error.message }
         };
     }
 }
@@ -567,200 +525,3 @@ async function triggerMixSession(sessionId, userId) {
     return await response.json();
 }
 
-// ===== USER AUDIO MANAGEMENT =====
-async function appendUserAudio(context, req, corsHeaders, userId) {
-    try {
-        context.log('Appending user audio for user:', userId);
-        
-        // Extract multipart form data
-        const sessionId = req.body.sessionId;
-        const timestamp = req.body.timestamp;
-        const audioFile = req.body.audio; // This would be the audio chunk
-        
-        if (!sessionId || !audioFile) {
-            throw new Error('Missing required fields: sessionId or audio');
-        }
-        
-        context.log(`User audio data - Session: ${sessionId}, Timestamp: ${timestamp}, Audio size: ${audioFile.length || 'unknown'}`);
-        
-        // Get session from Cosmos DB to verify it exists and is active
-        const { resource: session } = await sessionsContainer.item(sessionId, sessionId).read();
-        
-        if (!session || session.status === 'completed') {
-            throw new Error('Session not found or already completed');
-        }
-        
-        // Upload audio chunk to Azure Storage
-        const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
-        const userAudioPath = `${userId}/${sessionId}/user_chunks/chunk_${timestamp}.webm`;
-        const blockBlobClient = containerClient.getBlockBlobClient(userAudioPath);
-        
-        // Upload the audio chunk
-        await blockBlobClient.upload(audioFile, audioFile.length, {
-            blobHTTPHeaders: {
-                blobContentType: 'audio/webm'
-            }
-        });
-        
-        context.log(`✅ User audio chunk uploaded: ${userAudioPath}`);
-        
-        // Update session with user audio info (keep track of chunks)
-        if (!session.userAudioChunks) {
-            session.userAudioChunks = [];
-        }
-        session.userAudioChunks.push({
-            path: userAudioPath,
-            timestamp: timestamp,
-            size: audioFile.length || 0
-        });
-        session.lastActivity = new Date().toISOString();
-        
-        // Update session in Cosmos DB
-        await sessionsContainer.item(sessionId, sessionId).replace(session);
-        
-        context.res = {
-            status: 200,
-            headers: corsHeaders,
-            body: {
-                success: true,
-                message: 'User audio chunk saved successfully',
-                chunkPath: userAudioPath
-            }
-        };
-        
-    } catch (error) {
-        context.log.error('Error appending user audio:', error);
-        
-        context.res = {
-            status: 500,
-            headers: corsHeaders,
-            body: {
-                success: false,
-                error: error.message
-            }
-        };
-    }
-}
-
-// ===== USER AUDIO CONSOLIDATION =====
-async function consolidateUserAudio(userId, sessionId, userAudioChunks, context) {
-    try {
-        context.log(`🔧 Consolidating ${userAudioChunks.length} user audio chunks for session: ${sessionId}`);
-        
-        if (!userAudioChunks || userAudioChunks.length === 0) {
-            context.log('⚠️ No user audio chunks to consolidate');
-            return;
-        }
-        
-        const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
-        const tempFiles = [];
-        
-        // Sort chunks by timestamp to maintain correct order
-        const sortedChunks = userAudioChunks.sort((a, b) => parseInt(a.timestamp) - parseInt(b.timestamp));
-        
-        // Download all chunks to temporary files
-        for (let i = 0; i < sortedChunks.length; i++) {
-            const chunk = sortedChunks[i];
-            const tempFile = `/tmp/user_chunk_${i}.webm`;
-            
-            try {
-                const blobClient = containerClient.getBlockBlobClient(chunk.path);
-                const downloadResponse = await blobClient.download();
-                const chunks = [];
-                
-                downloadResponse.readableStreamBody.on('data', (data) => {
-                    chunks.push(data);
-                });
-                
-                await new Promise((resolve, reject) => {
-                    downloadResponse.readableStreamBody.on('end', resolve);
-                    downloadResponse.readableStreamBody.on('error', reject);
-                });
-                
-                const buffer = Buffer.concat(chunks);
-                await fs.writeFile(tempFile, buffer);
-                tempFiles.push(tempFile);
-                
-                context.log(`📥 Downloaded chunk ${i}: ${chunk.path} -> ${tempFile}`);
-                
-            } catch (error) {
-                context.log.error(`❌ Failed to download chunk ${chunk.path}:`, error.message);
-            }
-        }
-        
-        if (tempFiles.length === 0) {
-            context.log('❌ No chunks were successfully downloaded');
-            return;
-        }
-        
-        // Create FFmpeg concat file
-        const concatFile = '/tmp/concat.txt';
-        const concatContent = tempFiles.map(file => `file '${file}'`).join('\n');
-        await fs.writeFile(concatFile, concatContent);
-        
-        // Use FFmpeg to concatenate and normalize to MP3
-        const outputFile = '/tmp/session_user.mp3';
-        const ffmpegPath = '/usr/bin/ffmpeg'; // Azure Functions has ffmpeg available
-        
-        await new Promise((resolve, reject) => {
-            const { spawn } = require('child_process');
-            const ffmpeg = spawn(ffmpegPath, [
-                '-f', 'concat',
-                '-safe', '0',
-                '-i', concatFile,
-                '-c:a', 'mp3',
-                '-ar', '48000',      // Normalize sample rate
-                '-ab', '128k',       // Audio bitrate
-                '-ac', '1',          // Mono audio
-                '-y',                // Overwrite output
-                outputFile
-            ]);
-            
-            ffmpeg.on('close', (code) => {
-                if (code === 0) {
-                    resolve();
-                } else {
-                    reject(new Error(`FFmpeg exited with code ${code}`));
-                }
-            });
-            
-            ffmpeg.on('error', reject);
-        });
-        
-        // Upload consolidated file to storage
-        const consolidatedPath = `${userId}/${sessionId}/session_user.mp3`;
-        const consolidatedBlobClient = containerClient.getBlockBlobClient(consolidatedPath);
-        
-        const fileBuffer = await fs.readFile(outputFile);
-        await consolidatedBlobClient.upload(fileBuffer, fileBuffer.length, {
-            blobHTTPHeaders: {
-                blobContentType: 'audio/mpeg'
-            }
-        });
-        
-        context.log(`✅ User audio consolidated: ${consolidatedPath}`);
-        
-        // Cleanup temporary files
-        for (const tempFile of [...tempFiles, concatFile, outputFile]) {
-            try {
-                await fs.unlink(tempFile);
-            } catch (error) {
-                context.log(`⚠️ Failed to cleanup ${tempFile}:`, error.message);
-            }
-        }
-        
-        // Optionally cleanup chunk files from storage to save space
-        for (const chunk of userAudioChunks) {
-            try {
-                const chunkBlobClient = containerClient.getBlockBlobClient(chunk.path);
-                await chunkBlobClient.delete();
-            } catch (error) {
-                context.log(`⚠️ Failed to cleanup chunk ${chunk.path}:`, error.message);
-            }
-        }
-        
-    } catch (error) {
-        context.log.error('❌ Failed to consolidate user audio:', error.message);
-        throw error;
-    }
-}
