@@ -137,7 +137,7 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
 
     // Create AppendBlobs
     const userAudioPath = `${userId}/${sessionId}/session_user.${audioExtension}`;
-    const botAudioPath = `${userId}/${sessionId}/session_bot.mp3`;
+    const botAudioPath = `${userId}/${sessionId}/session_bot.wav`;
 
     const userBlobClient = containerClient.getAppendBlobClient(userAudioPath);
     const botBlobClient = containerClient.getAppendBlobClient(botAudioPath);
@@ -148,10 +148,10 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
     });
 
     await botBlobClient.createIfNotExists({
-        blobHTTPHeaders: { blobContentType: 'audio/mpeg' }
+        blobHTTPHeaders: { blobContentType: 'audio/wav' }
     });
 
-    context.log(`Created AppendBlobs - User: ${audioExtension}, Bot: mp3`);
+    context.log(`Created AppendBlobs - User: ${audioExtension}, Bot: wav`);
 
     // Create session document in Cosmos DB
     const sessionDoc = {
@@ -305,7 +305,7 @@ async function endSession(context, req, corsHeaders, userId) {
         userAudioPath = potentialUserAudioPath;
     }
 
-    const botAudioPath = `${userId}/${sessionId}/session_bot.mp3`;
+    const botAudioPath = `${userId}/${sessionId}/session_bot.wav`;
     const botBlobExists = await containerClient.getAppendBlobClient(botAudioPath).exists();
 
     context.log(`Audio files check - User: ${userAudioPath || 'none'}, Bot: ${botBlobExists}`);
@@ -360,12 +360,29 @@ async function appendBotAudio(context, req, corsHeaders, userId) {
             throw new Error('Audio chunk too large for AppendBlob (>4MB)');
         }
 
-        // Append to existing blob
-        const audioPath = `${userId}/${sessionId}/session_bot.mp3`;
+        // Append to existing blob (WAV format)
+        const audioPath = `${userId}/${sessionId}/session_bot.wav`;
         const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
         const appendBlobClient = containerClient.getAppendBlobClient(audioPath);
 
-        await appendBlobClient.appendBlock(fileData, fileData.length);
+        // Handle WAV header stripping for concatenation
+        const blobExists = await appendBlobClient.exists();
+        
+        if (!blobExists) {
+            // First chunk: create blob and append full WAV (with header)
+            await appendBlobClient.create({ blobHTTPHeaders: { blobContentType: 'audio/wav' }});
+            await appendBlobClient.appendBlock(fileData, fileData.length);
+            context.log(`✅ First WAV chunk: ${fileData.length} bytes (with header)`);
+        } else {
+            // Subsequent chunks: strip 44-byte WAV header and append only data
+            if (fileData.length > 44) {
+                const strippedData = fileData.subarray(44);
+                await appendBlobClient.appendBlock(strippedData, strippedData.length);
+                context.log(`✅ Additional WAV chunk: ${strippedData.length} bytes (header stripped)`);
+            } else {
+                context.log(`⚠️ WAV chunk too small (${fileData.length} bytes), skipping`);
+            }
+        }
 
         context.log(`✅ Bot audio appended: ${fileData.length} bytes to ${audioPath}`);
 
