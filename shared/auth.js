@@ -193,6 +193,8 @@ class AuthService {
         const tokenPayload = {
             userId: user.id,
             email: user.email,
+            name: user.name,
+            surname: user.surname,
             role: user.role,
             status: user.status,
             cefr: user.cefrLevel || user.germanLevel || 'B1'
