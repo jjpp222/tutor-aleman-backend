@@ -137,7 +137,7 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
 
     // Create AppendBlobs
     const userAudioPath = `${userId}/${sessionId}/session_user.${audioExtension}`;
-    const botAudioPath = `${userId}/${sessionId}/session_bot.wav`;
+    const botAudioPath = `${userId}/${sessionId}/session_bot.mp3`;
 
     const userBlobClient = containerClient.getAppendBlobClient(userAudioPath);
     const botBlobClient = containerClient.getAppendBlobClient(botAudioPath);
@@ -148,10 +148,10 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
     });
 
     await botBlobClient.createIfNotExists({
-        blobHTTPHeaders: { blobContentType: 'audio/wav' }
+        blobHTTPHeaders: { blobContentType: 'audio/mpeg' }
     });
 
-    context.log(`Created AppendBlobs - User: ${audioExtension}, Bot: wav`);
+    context.log(`Created AppendBlobs - User: ${audioExtension}, Bot: mp3`);
 
     // Create session document in Cosmos DB
     const sessionDoc = {
@@ -305,7 +305,7 @@ async function endSession(context, req, corsHeaders, userId) {
         userAudioPath = potentialUserAudioPath;
     }
 
-    const botAudioPath = `${userId}/${sessionId}/session_bot.wav`;
+    const botAudioPath = `${userId}/${sessionId}/session_bot.mp3`;
     const botBlobExists = await containerClient.getAppendBlobClient(botAudioPath).exists();
 
     context.log(`Audio files check - User: ${userAudioPath || 'none'}, Bot: ${botBlobExists}`);
@@ -360,8 +360,8 @@ async function appendBotAudio(context, req, corsHeaders, userId) {
             throw new Error('Audio chunk too large for AppendBlob (>4MB)');
         }
 
-        // Append to existing blob (WAV format for compatibility with user audio)
-        const audioPath = `${userId}/${sessionId}/session_bot.wav`;
+        // Append to existing blob
+        const audioPath = `${userId}/${sessionId}/session_bot.mp3`;
         const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
         const appendBlobClient = containerClient.getAppendBlobClient(audioPath);
 
