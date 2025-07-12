@@ -54,7 +54,7 @@ module.exports = async function (context, req) {
 
         // Define blob names
         const userBlobName = prefix + `session_user.${userFormat}`;
-        const botBlobName = prefix + "session_bot.mp3";
+        const botBlobName = prefix + "session_bot.wav";
         const mixBlobName = prefix + "session_mix.mp3";
 
         const userBlobClient = containerClient.getBlockBlobClient(userBlobName);
@@ -79,22 +79,14 @@ module.exports = async function (context, req) {
         // Download audio files
         const tmpDir = "/tmp";
         const userPath = path.join(tmpDir, `user_${sessionId}.${userFormat}`);
-        const botPath = path.join(tmpDir, `bot_${sessionId}.mp3`);
+        const botPath = path.join(tmpDir, `bot_${sessionId}.wav`);
 
         await userBlobClient.downloadToFile(userPath);
         await botBlobClient.downloadToFile(botPath);
         context.log(`⬇️ Audio files downloaded.`);
 
-        // 🔧 Clean/repair bot audio (fix MP3 concatenation corruption)
-        const cleanBotPath = path.join(tmpDir, `bot_${sessionId}_clean.mp3`);
-        context.log('🔧 Cleaning bot audio MP3...');
-        await new Promise((resolve, reject) => {
-            execFile(ffmpeg, ['-i', botPath, '-c:a', 'libmp3lame', '-b:a', '128k', '-avoid_negative_ts', 'make_zero', '-y', cleanBotPath], (err) => {
-                if (err) return reject(err);
-                resolve();
-            });
-        });
-        context.log(`✅ Bot audio cleaned.`);
+        // Bot audio is already in WAV format - no cleaning needed
+        const cleanBotPath = botPath;
 
         // Conditional conversion for Safari MP4 to AAC
         let finalUserPath = userPath;
@@ -135,7 +127,7 @@ module.exports = async function (context, req) {
         context.log(`✅ Session metadata updated.`);
 
         // Cleanup
-        await Promise.all([fs.unlink(userPath), fs.unlink(botPath), fs.unlink(cleanBotPath), fs.unlink(mixPath), finalUserPath !== userPath ? fs.unlink(finalUserPath) : Promise.resolve()].map(p => p.catch(e => context.log.warn(e.message))));
+        await Promise.all([fs.unlink(userPath), fs.unlink(botPath), fs.unlink(mixPath), finalUserPath !== userPath ? fs.unlink(finalUserPath) : Promise.resolve()].map(p => p.catch(e => context.log.warn(e.message))));
         context.log(`🎉 Mix session completed successfully.`);
 
     } catch (error) {
