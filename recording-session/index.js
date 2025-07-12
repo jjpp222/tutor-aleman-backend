@@ -76,7 +76,8 @@ module.exports = async function (context, req) {
                 if (segments.includes('start')) {
                     await startSession(context, req, corsHeaders, userId, userLevel);
                 } else if (segments.includes('append-bot-audio')) {
-                    await appendBotAudio(context, req, corsHeaders, userId);
+                    // Bot audio now uploaded as single file - endpoint deprecated
+                    context.res = { status: 200, headers: corsHeaders, body: { success: true, message: 'Bot audio handled as single file' } };
                 } else if (segments.includes('append-user-audio')) {
                     await appendUserAudio(context, req, corsHeaders, userId);
                 } else if (segments.includes('append')) {
@@ -135,24 +136,23 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
     const audioExtension = isSafari ? 'mp4' : 'webm';
     const audioMimeType = isSafari ? 'audio/mp4' : 'audio/webm';
 
-    // Create Blobs - BlockBlob for user (single file), AppendBlob for bot (chunks)
+    // Create BlockBlobs for both user and bot (single file uploads)
     const userAudioPath = `${userId}/${sessionId}/session_user.${audioExtension}`;
     const botAudioPath = `${userId}/${sessionId}/session_bot.wav`;
 
     const userBlobClient = containerClient.getBlockBlobClient(userAudioPath);
-    const botBlobClient = containerClient.getAppendBlobClient(botAudioPath);
+    const botBlobClient = containerClient.getBlockBlobClient(botAudioPath);
 
-    // Create empty user BlockBlob
+    // Create empty BlockBlobs
     await userBlobClient.upload('', 0, {
         blobHTTPHeaders: { blobContentType: audioMimeType }
     });
 
-    // Create bot AppendBlob (maintains existing system)
-    await botBlobClient.createIfNotExists({
+    await botBlobClient.upload('', 0, {
         blobHTTPHeaders: { blobContentType: 'audio/wav' }
     });
 
-    context.log(`Created Blobs - User: ${audioExtension} (BlockBlob), Bot: wav (AppendBlob)`);
+    context.log(`Created BlockBlobs - User: ${audioExtension}, Bot: wav`);
 
     // Create session document in Cosmos DB
     const sessionDoc = {
@@ -183,7 +183,7 @@ async function startSession(context, req, corsHeaders, userId, userLevel) {
     sasExpiry.setHours(sasExpiry.getHours() + 2); // 2 hours expiry
 
     const userAudioSAS = await generateSASUrl(containerClient, userAudioPath, 'cw', sasExpiry); // Create, Write (BlockBlob)
-    const botAudioSAS = await generateSASUrl(containerClient, botAudioPath, 'acw', sasExpiry);
+    const botAudioSAS = await generateSASUrl(containerClient, botAudioPath, 'cw', sasExpiry); // Create, Write (BlockBlob)
     const transcriptSAS = await generateSASUrl(containerClient, sessionDoc.transcriptUrl, 'w', sasExpiry);
 
     context.res = {
@@ -312,7 +312,14 @@ async function endSession(context, req, corsHeaders, userId) {
     }
 
     const botAudioPath = `${userId}/${sessionId}/session_bot.wav`;
-    const botBlobExists = await containerClient.getAppendBlobClient(botAudioPath).exists();
+    const botBlobClient = containerClient.getBlockBlobClient(botAudioPath);
+    let botBlobExists = false;
+    if (await botBlobClient.exists()) {
+        const props = await botBlobClient.getProperties();
+        if (props.contentLength > 0) {  // Ensure it's not empty
+            botBlobExists = true;
+        }
+    }
 
     context.log(`Audio files check - User: ${userAudioPath || 'none'}, Bot: ${botBlobExists}`);
 
