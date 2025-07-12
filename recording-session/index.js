@@ -194,13 +194,33 @@ async function appendTurn(context, req, corsHeaders, userId) {
 
     context.log(`Appending turn to session: ${sessionId}, speaker: ${speaker}`);
 
-    // Get session from Cosmos DB
+    // Get session from Cosmos DB with retry for consistency
     context.log(`Attempting to read session: ${sessionId} with userId: ${userId}`);
-    const { resource: session } = await sessionsContainer.item(sessionId, userId).read();
-    context.log(`Session read result:`, session ? { id: session.id, status: session.status, userId: session.userId } : 'NULL');
+    let session = null;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts && !session) {
+        attempts++;
+        try {
+            const { resource: result } = await sessionsContainer.item(sessionId, userId).read();
+            session = result;
+            if (session) {
+                context.log(`Session found on attempt ${attempts}:`, { id: session.id, status: session.status });
+                break;
+            }
+        } catch (error) {
+            context.log(`Session read attempt ${attempts} failed:`, error.message);
+        }
+        
+        if (attempts < maxAttempts) {
+            context.log(`Session not found, retrying in 1 second... (attempt ${attempts}/${maxAttempts})`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
     
     if (!session || session.status !== 'active') {
-        context.log.error(`Session validation failed - Session exists: ${!!session}, Status: ${session?.status}`);
+        context.log.error(`Session validation failed after ${attempts} attempts - Session exists: ${!!session}, Status: ${session?.status}`);
         throw new Error('Session not found or not active');
     }
 
