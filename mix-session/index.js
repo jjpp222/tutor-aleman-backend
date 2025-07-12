@@ -9,14 +9,29 @@ const storageConnectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
 const cosmosEndpoint = process.env.COSMOS_DB_ENDPOINT;
 const cosmosKey = process.env.COSMOS_DB_KEY;
 const conversationsContainer = 'conversations';
-
-// FFmpeg binary path (assuming it's available in the Azure Function environment)
 const ffmpeg = "ffmpeg";
 
-// Cosmos DB client
+// Clients
+const blobServiceClient = BlobServiceClient.fromConnectionString(storageConnectionString);
 const cosmosClient = new CosmosClient({ endpoint: cosmosEndpoint, key: cosmosKey });
 const database = cosmosClient.database('TutorAlemanDB');
 const sessionsContainer = database.container('Sessions');
+
+// Helper function for retrying
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function waitForBlob(blobClient, retries = 6, delay = 10000) {
+    for (let i = 0; i < retries; i++) {
+        if (await blobClient.exists()) {
+            const props = await blobClient.getProperties();
+            if (props.contentLength > 0) {
+                return true;
+            }
+        }
+        await sleep(delay);
+    }
+    return false;
+}
 
 module.exports = async function (context, req) {
     const { sessionId, userId } = req.body;
@@ -28,14 +43,13 @@ module.exports = async function (context, req) {
 
     try {
         const prefix = `${userId}/${sessionId}/`;
+        const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
 
-        // Get session data from Cosmos DB to find audio format
+        // Get session data from Cosmos DB
         const { resource: sessionData } = await sessionsContainer.item(sessionId, userId).read();
-        if (!sessionData) {
-            throw new Error(`Session not found: ${sessionId}`);
-        }
-        const userFormat = sessionData.userAudioFormat || 'webm'; // Default to webm if not specified
-
+        if (!sessionData) throw new Error(`Session not found: ${sessionId}`);
+        
+        const userFormat = sessionData.userAudioFormat || 'webm';
         context.log(`🎤 User audio format: ${userFormat}`);
 
         // Define blob names
@@ -43,98 +57,75 @@ module.exports = async function (context, req) {
         const botBlobName = prefix + "session_bot.mp3";
         const mixBlobName = prefix + "session_mix.mp3";
 
-        const blobServiceClient = BlobServiceClient.fromConnectionString(storageConnectionString);
-        const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
-        
-        // Check if mix already exists
+        const userBlobClient = containerClient.getBlockBlobClient(userBlobName);
+        const botBlobClient = containerClient.getBlockBlobClient(botBlobName);
         const mixBlobClient = containerClient.getBlockBlobClient(mixBlobName);
+
         if (await mixBlobClient.exists()) {
             context.log(`✅ Mix already exists: ${mixBlobName}`);
             return;
         }
+
+        // Wait for blobs to be ready
+        context.log('⏳ Waiting for audio blobs to be available...');
+        const isUserBlobReady = await waitForBlob(userBlobClient);
+        const isBotBlobReady = await waitForBlob(botBlobClient);
+
+        if (!isUserBlobReady || !isBotBlobReady) {
+            throw new Error(`Audio blobs not found or empty after waiting. User: ${isUserBlobReady}, Bot: ${isBotBlobReady}`);
+        }
+        context.log('✅ Both audio blobs are available and not empty.');
 
         // Download audio files
         const tmpDir = "/tmp";
         const userPath = path.join(tmpDir, `user_${sessionId}.${userFormat}`);
         const botPath = path.join(tmpDir, `bot_${sessionId}.mp3`);
 
-        const userBlobClient = containerClient.getBlockBlobClient(userBlobName);
-        const botBlobClient = containerClient.getBlockBlobClient(botBlobName);
-
         await userBlobClient.downloadToFile(userPath);
         await botBlobClient.downloadToFile(botPath);
-        context.log(`⬇️ Audio files downloaded to temp directory`);
+        context.log(`⬇️ Audio files downloaded.`);
 
         // Conditional conversion for Safari MP4 to AAC
         let finalUserPath = userPath;
         if (userFormat === 'mp4') {
             const convertedPath = path.join(tmpDir, `user_${sessionId}_converted.aac`);
-            context.log('🔄 Converting Safari MP4 to AAC for compatibility...');
-            
+            context.log('🔄 Converting Safari MP4 to AAC...');
             await new Promise((resolve, reject) => {
-                execFile(ffmpeg, [
-                    '-i', userPath,
-                    '-vn',                // No video
-                    '-c:a', 'aac',       // AAC codec
-                    '-b:a', '128k',      // Bitrate
-                    '-y',                // Overwrite
-                    convertedPath
-                ], (error, stdout, stderr) => {
-                    if (error) {
-                        context.log.error(`FFmpeg conversion error: ${stderr}`);
-                        return reject(error);
-                    }
-                    context.log(`✅ Converted Safari MP4 to AAC: ${convertedPath}`);
+                execFile(ffmpeg, ['-i', userPath, '-vn', '-c:a', 'aac', '-b:a', '128k', '-y', convertedPath], (err) => {
+                    if (err) return reject(err);
                     resolve();
                 });
             });
             finalUserPath = convertedPath;
+            context.log(`✅ Conversion complete.`);
         }
 
         // FFmpeg mixing command
         const mixPath = path.join(tmpDir, `mix_${sessionId}.mp3`);
-        const args = [
-            "-hide_banner", "-y",
-            "-i", finalUserPath, // Use converted path if available
-            "-i", botPath,
-            "-filter_complex", "[0:a][1:a]amix=inputs=2:normalize=1",
-            "-c:a", "libmp3lame", "-b:a", "128k",
-            mixPath
-        ];
+        const args = ["-hide_banner", "-y", "-i", finalUserPath, "-i", botPath, "-filter_complex", "[0:a][1:a]amix=inputs=2:normalize=1", "-c:a", "libmp3lame", "-b:a", "128k", mixPath];
 
-        context.log(`🔄 Running FFmpeg with args: ${args.join(' ')}`);
+        context.log(`🔄 Running FFmpeg...`);
         await new Promise((resolve, reject) => {
-            execFile(ffmpeg, args, { timeout: 300000 }, (error, stdout, stderr) => {
-                if (error) {
-                    context.log.error(`FFmpeg mix error: ${stderr}`);
-                    return reject(error);
-                }
-                context.log(`✅ FFmpeg mixing completed`);
+            execFile(ffmpeg, args, { timeout: 300000 }, (err) => {
+                if (err) return reject(err);
                 resolve();
             });
         });
+        context.log(`✅ FFmpeg mixing completed.`);
 
         // Upload the mixed audio
-        await mixBlobClient.uploadFile(mixPath, {
-            blobHTTPHeaders: { blobContentType: "audio/mpeg" }
-        });
+        await mixBlobClient.uploadFile(mixPath, { blobHTTPHeaders: { blobContentType: "audio/mpeg" } });
         context.log(`📤 Mixed audio uploaded: ${mixBlobName}`);
 
-        // Update session metadata in Cosmos DB
+        // Update session metadata
         sessionData.status = 'completed';
         sessionData.audioUrls.mixed = mixBlobName;
         await sessionsContainer.item(sessionId, userId).replace(sessionData);
-        context.log(`✅ Session metadata updated with mix URL`);
+        context.log(`✅ Session metadata updated.`);
 
-        // Cleanup temporary files
-        await Promise.all([
-            fs.unlink(userPath).catch(() => {}),
-            fs.unlink(botPath).catch(() => {}),
-            fs.unlink(mixPath).catch(() => {}),
-            finalUserPath !== userPath ? fs.unlink(finalUserPath).catch(() => {}) : Promise.resolve()
-        ]);
-
-        context.log(`🎉 Mix session completed successfully for: ${sessionId}`);
+        // Cleanup
+        await Promise.all([fs.unlink(userPath), fs.unlink(botPath), fs.unlink(mixPath), finalUserPath !== userPath ? fs.unlink(finalUserPath) : Promise.resolve()].map(p => p.catch(e => context.log.warn(e.message))));
+        context.log(`🎉 Mix session completed successfully.`);
 
     } catch (error) {
         context.log.error(`❌ Mix-session failed: ${error.message}`);
