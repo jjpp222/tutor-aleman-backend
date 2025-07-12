@@ -705,18 +705,23 @@ Vida diaria, hobbies, viajes, cultura alemana, trabajo, estudios, planes futuros
     } catch (error) {
         context.log.error('Voice conversation error:', error.message);
         context.log.error('Error stack:', error.stack);
-        context.log.error('Error context:', {
-            transcript: transcript?.substring(0, 100),
-            historyLength: conversationHistory?.length || 0,
-            timestamp: new Date().toISOString()
-        });
+        
+        let errorMessageForUser = 'Es tut mir leid, es gab ein internes Problem. Bitte versuche es später erneut.'; // Default generic error
+        let statusCode = 500; // Default status code
+
+        // Check if the error is related to OpenAI content filtering or API failure
+        if (error.message.includes('OpenAI API failed') || error.message.includes('content_filter')) {
+            errorMessageForUser = 'Entschuldigung, ich kann diese Anfrage im Moment nicht bearbeiten. Bitte versuche es mit einer anderen Formulierung.';
+            statusCode = 200; // Return 200 to the frontend for a graceful error display
+        }
         
         context.res = {
-            status: 500,
+            status: statusCode,
             headers: corsHeaders,
             body: {
                 success: false,
-                error: error.message,
+                germanResponse: errorMessageForUser, // Send a German message to the user
+                error: error.message, // Keep original error for debugging
                 details: error.stack,
                 timestamp: new Date().toISOString()
             }
