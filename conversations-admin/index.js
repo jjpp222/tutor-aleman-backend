@@ -200,21 +200,27 @@ async function downloadSessionPackage(context, req, corsHeaders) {
 
     context.log(`Admin downloading session package: ${sessionId}`);
 
-    // Get session from Cosmos DB
-    const querySpec = {
-        query: "SELECT * FROM c WHERE c.id = @sessionId",
-        parameters: [
-            { name: "@sessionId", value: sessionId }
-        ]
-    };
-
-    const { resources: sessions } = await sessionsContainer.items.query(querySpec).fetchAll();
+    // Extract userId from sessionId (format: sess_timestamp_userId_uuid)
+    const sessionParts = sessionId.split('_');
+    if (sessionParts.length < 4 || sessionParts[0] !== 'sess') {
+        throw new Error('Invalid sessionId format');
+    }
+    const userId = sessionParts[2];
     
-    if (sessions.length === 0) {
+    context.log(`Extracted userId: ${userId} from sessionId: ${sessionId}`);
+
+    // Get session from Cosmos DB using partition key
+    let session;
+    try {
+        const { resource } = await sessionsContainer.item(sessionId, sessionId).read();
+        session = resource;
+        if (!session) {
+            throw new Error('Session not found');
+        }
+    } catch (error) {
+        context.log.error(`Failed to read session with partition key: ${error.message}`);
         throw new Error('Session not found');
     }
-
-    const session = sessions[0];
     const containerClient = blobServiceClient.getContainerClient(conversationsContainer);
 
     // Check which files exist
@@ -242,7 +248,7 @@ async function downloadSessionPackage(context, req, corsHeaders) {
             const exists = await botBlobClient.exists();
             if (exists) {
                 files.push({
-                    name: 'session_bot.mp3',
+                    name: 'session_bot.wav',
                     blobPath: session.audioUrls.bot,
                     type: 'audio'
                 });
@@ -277,6 +283,8 @@ async function downloadSessionPackage(context, req, corsHeaders) {
     sasExpiry.setHours(sasExpiry.getHours() + 1);
 
     const downloadUrls = {};
+    const specificDownloadUrls = {};
+    
     for (const file of files) {
         try {
             const blobClient = containerClient.getBlobClient(file.blobPath);
@@ -285,6 +293,15 @@ async function downloadSessionPackage(context, req, corsHeaders) {
                 expiresOn: sasExpiry
             });
             downloadUrls[file.name] = sasUrl;
+            
+            // Create specific URLs for frontend compatibility
+            if (file.name.includes('user')) {
+                specificDownloadUrls.userAudio = sasUrl;
+            } else if (file.name.includes('bot')) {
+                specificDownloadUrls.botAudio = sasUrl;
+            } else if (file.name.includes('mix')) {
+                specificDownloadUrls.mixedAudio = sasUrl;
+            }
         } catch (error) {
             context.log(`Failed to generate SAS for ${file.name}: ${error.message}`);
         }
@@ -311,7 +328,7 @@ async function downloadSessionPackage(context, req, corsHeaders) {
             success: true,
             sessionId: sessionId,
             sessionInfo: sessionInfo,
-            downloadUrls: downloadUrls,
+            downloadUrls: { ...downloadUrls, ...specificDownloadUrls },
             expiresAt: sasExpiry.toISOString(),
             availableFiles: files.map(f => f.name)
         }
@@ -327,21 +344,25 @@ async function getSessionTranscript(context, req, corsHeaders) {
 
     context.log(`Admin requesting transcript for session: ${sessionId}`);
 
-    // Get session from Cosmos DB
-    const querySpec = {
-        query: "SELECT * FROM c WHERE c.id = @sessionId",
-        parameters: [
-            { name: "@sessionId", value: sessionId }
-        ]
-    };
+    // Extract userId from sessionId (format: sess_timestamp_userId_uuid)
+    const sessionParts = sessionId.split('_');
+    if (sessionParts.length < 4 || sessionParts[0] !== 'sess') {
+        throw new Error('Invalid sessionId format');
+    }
+    const userId = sessionParts[2];
 
-    const { resources: sessions } = await sessionsContainer.items.query(querySpec).fetchAll();
-    
-    if (sessions.length === 0) {
+    // Get session from Cosmos DB using partition key
+    let session;
+    try {
+        const { resource } = await sessionsContainer.item(sessionId, sessionId).read();
+        session = resource;
+        if (!session) {
+            throw new Error('Session not found');
+        }
+    } catch (error) {
+        context.log.error(`Failed to read session with partition key: ${error.message}`);
         throw new Error('Session not found');
     }
-
-    const session = sessions[0];
 
     if (!session.transcriptUrl) {
         throw new Error('No transcript available for this session');
